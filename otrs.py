@@ -158,21 +158,22 @@ def AddNote_VT_Scan_IP(client, ticket):
              
 
         if msg_dst == "Fail" and msg_src == "Fail": #Check if this was a valid IP in both cases
-            return 0
+            return 0, 0, 0
         if msg_dst in ("Failed scan.", "Fail") and msg_src in ("Failed scan.", "Fail"):
-            return 0
+            return 0, 0, 0
         if msg_dst == "Fail":
             msg_dst == ""
+        try:
+            all_hits = str(score_src[1]+score_dst[1])
+            all_eng = str(score_src[2]+score_dst[2])
+            end_score = all_hits+"/"+all_eng
+            VT_Note = Article({"Subject" : "VirusTotal Scan Result "+end_score, "Body" : msg_src+msg_dst})
+            result = "testing mode"
+            result = client.ticket_update(ticket_id, VT_Note)
+            pprint.pprint(VT_Note)
 
-        all_hits = str(score_src[1]+score_dst[1])
-        all_eng = str(score_src[2]+score_dst[2])
-        end_score = all_hits+"/"+all_eng
-        VT_Note = Article({"Subject" : "VirusTotal Scan Result "+end_score, "Body" : msg_src+msg_dst})
-        result = "testing mode"
-        result = client.ticket_update(ticket_id, VT_Note)
-        pprint.pprint(VT_Note)
-
-        #TODO make score dependent prio up/down
+        except:
+            return 0, 0, 0
         return result, (score_src[1]+score_dst[1]), (score_src[2]+score_dst[2])
 
 
@@ -263,6 +264,7 @@ def every_minute():
             ticketDict = ticket.to_dct()
             ArticleArray = ticketDict['Ticket']['Article']
             skipTicket = False
+            updated_state = ""
 
             # Skip already done tickets
             if TicketNumber in DoneTickets:
@@ -282,8 +284,8 @@ def every_minute():
             CorrectDefaultPrio(client, ticket)
 
             result, hits_vt, engines_vt = AddNote_VT_Scan_IP(client, ticket)
-
-            updated_state = UpdatePrio(client, ticket, hits_vt, engines_vt)
+            if result != 0:
+                updated_state = UpdatePrio(client, ticket, hits_vt, engines_vt)
             
             if updated_state != "closed!":
                 print("Result of final ticket update: "+str(client.ticket_update(ticket_id, StateType="new", State="new")))
