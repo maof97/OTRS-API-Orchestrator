@@ -1,3 +1,5 @@
+DRY_RUN = False
+
 VT_UPPRIO_THRESHOLD = 1  # Needed VT hit-Counts for increased priority
 VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-priorization
 Def_P4_Tickets = (
@@ -10,7 +12,9 @@ Def_P4_Tickets = (
 "alerts on Ipad"
 )
 DoneTickets = [1]
+DoneArticles = [1]
 
+from ssl import ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE
 from typing import KeysView
 from pyotrs import Client
 from pyotrs.lib import Article, Ticket
@@ -137,45 +141,102 @@ def AddNote_VT_Scan_IP(client, ticket):
         ticket_id = ticket.field_get("TicketID")
         msg_src = "Failed scan."
         msg_dst = "Failed scan."
+        ArticleArray = ticketDict['Ticket']['Article']
+        score_src = [0, 0, 0]
+        score_dst = [0, 0, 0]
+        DoneIPs = []
+        DoneIPs.clear()
+        final_score = [0, 0, 0]
 
-        try:
-            src_ip = re.search('[\n\r].*SOURCE IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][0]['Body'])[1]
-            msg_src, score_src = checkIPinVT(src_ip)
-        except:
-            dst_ip = ""  
+
+        for i in range(len(ArticleArray)):
+
+            # Skip already done Articles...
+            ArticleID = ArticleArray[i]['ArticleID']
+
+            if ArticleID in DoneArticles:
+                print("Article#"+ArticleID+" already done. Skipping...")
+                continue
+
+            try:
+
+                src_ip = re.search('[\n\r].*SOURCE IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'],re.IGNORECASE)[1]
+                msg_src, score_src = checkIPinVT(src_ip)
+            except:
+                dst_ip = ""  
 
 
-        if msg_src != "Fail": #Check if this was a valid IP
-            msg_src+="\n\n\n"
-        else:
-            msg_src=""
+            if msg_src != "Fail": #Check if this was a valid IP
+                msg_src+="\n\n\n"
+            else:
+                msg_src=""
 
-        try:
-            dst_ip = re.search('[\n\r].*DESTINATION IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][0]['Body'])[1] 
-            msg_dst, score_dst = checkIPinVT(dst_ip)
-        except:
-            dst_ip = "" 
-             
+            try:
+                dst_ip = re.search('[\n\r].*DESTINATION IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)[1] 
+                msg_dst, score_dst = checkIPinVT(dst_ip)
+            except:
+                dst_ip = "" 
 
-        if msg_dst == "Fail" and msg_src == "Fail": #Check if this was a valid IP in both cases
-            return 0, 0, 0
-        if msg_dst in ("Failed scan.", "Fail") and msg_src in ("Failed scan.", "Fail"):
-            return 0, 0, 0
-        if msg_dst == "Fail":
-            msg_dst == ""
-        try:
-            all_hits = str(score_src[1]+score_dst[1])
-            all_eng = str(score_src[2]+score_dst[2])
-            end_score = all_hits+"/"+all_eng
-            VT_Note = Article({"Subject" : "VirusTotal Scan Result "+end_score, "Body" : msg_src+msg_dst})
-            result = "testing mode"
-            result = client.ticket_update(ticket_id, VT_Note)
-            pprint.pprint(VT_Note)
+                
+            # Handle VT Result and check for fails
+            if msg_dst == "Fail" and msg_src == "Fail": #Check if this was a valid IP in both cases
+                continue
+            if (msg_dst in ("Failed scan.", "Fail")) and (msg_src in ("Failed scan.", "Fail")):
+                continue
+            if (msg_src) in DoneIPs:
+                print("Skipping Report for VT Result src_ip, because IP was already done in this ticket.")
+                continue
+            if (dst_ip) in DoneIPs:
+                print("Skipping Report for VT Result dest_ip, because IP was already done in this ticket.")
+                continue
+            if msg_dst == "Fail":
+                msg_dst == ""
+            else:
+                DoneIPs.append(msg_src)
+            if msg_src == "Fail":
+                msg_src == ""
+            else:
+                DoneIPs.append(msg_src)
 
-        except:
-            return 0, 0, 0
-        return result, (score_src[1]+score_dst[1]), (score_src[2]+score_dst[2])
+            # Craft the Note to send to ticket
+            try:
+                all_hits = str(score_src[1]+score_dst[1])
+                all_eng = str(score_src[2]+score_dst[2])
+                end_score = all_hits+"/"+all_eng
+                if(msg_dst == ""):
+                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+src_ip+" -> ("+end_score+")", "Body" : msg_src+msg_dst})
+                if(msg_src == ""):
+                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+dst_ip+" -> ("+end_score+")", "Body" : msg_src+msg_dst})
+                if((msg_src != "") and (msg_dst != "")):
+                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IPs "+src_ip+" / "+dst_ip+" -> ("+end_score+")", "Body" : msg_src+msg_dst})                                 
 
+                if not DRY_RUN:
+                    result = client.ticket_update(ticket_id, VT_Note)
+                else:
+                    print("(dry run)")
+
+                pprint.pprint(VT_Note)
+
+            except Exception as e:
+                print("Error in AddNote_VT_Scan_IP > Add Note / Note Update for ArticleID: "+str(ArticleID))
+                print((traceback.format_exc()))
+                pass
+            
+            #Count final score
+            final_score[1] += (score_src[1]+score_dst[1])
+            final_score[2] += (score_src[2]+score_dst[2])
+
+
+        ## Ticket done ##
+
+        #Update state?
+        updated_state = UpdatePrio(client, ticket, final_score[1], final_score[2])
+
+        if updated_state != "closed!":
+            if not DRY_RUN:
+                print("Result of final ticket update: "+str(client.ticket_update(ticket_id, StateType="new", State="new")))
+            else:
+                print("Result of final ticket update: (dry run)") 
 
 
 def SetTicketPrio(client, ticket, prio):
@@ -190,7 +251,8 @@ def SetTicketPrio(client, ticket, prio):
     current_prio = ticket.field_get("Priority")
     ticket_id = ticket.field_get("TicketID")
     Title = ticket.field_get("Title")
-    result = client.ticket_update(ticket_id, Priority=prio)
+    if not DRY_RUN:
+        result = client.ticket_update(ticket_id, Priority=prio)
     print("Updated ticket priority from [" +(current_prio)+ "] to -> [" +prio+ "] for: "+Title)
 
 
@@ -221,8 +283,9 @@ def UpdatePrio(client, ticket, hits, engines):
             new_prio = (current_prio -1)
             SetTicketPrio(client, ticket, new_prio)
             Note = Article({"Subject" : "Increased Priority to "+str(new_prio), "Body" : "Because of too many VT hits for the given connection, the priority was increased."})
-            result = "testing mode"
-            result = client.ticket_update(ticket_id, Note)
+            result = "(dry run)"
+            if not DRY_RUN:
+                result = client.ticket_update(ticket_id, Note)
             return
 
         if engines >= VT_DEPRIO_THRESHOLD and hits == 0:
@@ -235,8 +298,9 @@ def UpdatePrio(client, ticket, hits, engines):
             new_prio = (current_prio +1)
             if new_prio == 5:
                 Note = Article({"Subject" : "Closed Ticket", "Body" : "Because of 0 VT hits for the given connection and the ticket already being priority 4 (low), the ticket was closed automatically."})
-                result = "testing mode"
-                result = client.ticket_update(ticket_id, Note) 
+                result = "(dry run)"
+                if not DRY_RUN:
+                    result = client.ticket_update(ticket_id, Note) 
 
                 result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")
                 print("Closed ticket: "+Title)    
@@ -244,15 +308,16 @@ def UpdatePrio(client, ticket, hits, engines):
             else:
                 SetTicketPrio(client, ticket, new_prio)
                 Note = Article({"Subject" : "Decreased Priority to "+str(new_prio), "Body" : "Because of 0 VT hits for the given connection, the priority was decreased."})
-                result = "testing mode"
-                result = client.ticket_update(ticket_id, Note)
+                result = "(dry run)"
+                if not DRY_RUN:
+                    result = client.ticket_update(ticket_id, Note)
             return
 
         
 
 def every_minute():
         print("Executing scheudeled task (1 min):\n\n")
-        client = Client("http://10.24.1.2/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST","SIEMUser","9f5d8ccf63f8a3e9fb874d32ac5d6a4ca9cc88574b2fbfd3f4bca9a8bbf636cd")
+        client = Client("http://cloud.swiftbird.de/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST","SIEMUser","9f5d8ccf63f8a3e9fb874d32ac5d6a4ca9cc88574b2fbfd3f4bca9a8bbf636cd")
         client.session_create()
         last_day = datetime.utcnow() - timedelta(days=10)
         new_tickets = client.ticket_search(TicketCreateTimeNewerDate=last_day, StateType=['new'])
@@ -268,27 +333,33 @@ def every_minute():
             updated_state = ""
 
             # Skip already done tickets
-            if TicketNumber in DoneTickets:
-                skipTicket = True
-            for i in range(len(ArticleArray)):
-                if "API" in ArticleArray[i]["From"]:
-                    skipTicket = True    
-                    pass    
-            if skipTicket:
-                print("Ticket#"+TicketNumber+" already done. Skipping...")
-                continue
+            try:
+                if TicketNumber in DoneTickets:
+                    #skipTicket = True
+                    # Setting this off because of the new implementation of Article based done-Check
+                    pass
+
+                for i in range(len(ArticleArray)):
+                    # If an Article from API was after an Article -> mark the article as done and skip
+                    if "API" in ArticleArray[i]["From"]:
+                        DoneArticles.append(ArticleArray[i-1]["ArticleID"])
+                        pass    
+                if skipTicket:
+                    print("Ticket#"+TicketNumber+" already done. Skipping...")
+                    continue
+            except:
+                print("There was an Error in Skipping already done tickets (every_minute).\n")
 
             #Found new ticket:    
             print("\n--##  Got new ticket to update: "+Title+"  ##--")    
 
             CorrectDefaultPrio(client, ticket)
 
-            result, hits_vt, engines_vt = AddNote_VT_Scan_IP(client, ticket)
-            if result != 0:
-                updated_state = UpdatePrio(client, ticket, hits_vt, engines_vt)
-            
-            if updated_state != "closed!":
-                print("Result of final ticket update: "+str(client.ticket_update(ticket_id, StateType="new", State="new")))
+            #result, hits_vt, engines_vt = 
+            AddNote_VT_Scan_IP(client, ticket)
+            #if result != 0: (Now in AddNote function aboe (per-Article))
+            #    updated_state = UpdatePrio(client, ticket, hits_vt, engines_vt)
+                         
             DoneTickets.append(TicketNumber)
 
         print("\n\nSheudled task (1min) done.\nNext start in 60 seconds...")
@@ -296,9 +367,12 @@ def every_minute():
 
 def main():
     print("Started OTRS-API-Orchestrator")
+    if DRY_RUN:
+        print("\nWARNING Dry Run -- No ticket will be updated!\n\n")
+
     try:
         every_minute()
-        every(60, every_minute)
+        every(10, every_minute)
     except KeyboardInterrupt:
         print('\n\nStopped Program!\n')
         try:
