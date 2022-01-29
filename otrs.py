@@ -6,8 +6,8 @@ Def_P4_Tickets = (
 "INDICATOR-SHELLCODE", 
 "Test Rule", 
 "ET DNS Query for .to TLD", 
-"ET DNS Query for .cloud TLD"
-"alerts on Ipados"
+"ET DNS Query for .cloud TLD",
+"alerts on Ipad"
 )
 DoneTickets = [1]
 
@@ -238,7 +238,8 @@ def UpdatePrio(client, ticket, hits, engines):
                 result = "testing mode"
                 result = client.ticket_update(ticket_id, Note) 
 
-                result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")    
+                result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")
+                print("Closed ticket: "+Title)    
                 return "closed!"      
             else:
                 SetTicketPrio(client, ticket, new_prio)
@@ -253,8 +254,8 @@ def every_minute():
         print("Executing scheudeled task (1 min):\n\n")
         client = Client("http://10.24.1.2/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST","SIEMUser","9f5d8ccf63f8a3e9fb874d32ac5d6a4ca9cc88574b2fbfd3f4bca9a8bbf636cd")
         client.session_create()
-        last_day = datetime.utcnow() - timedelta(days=2)
-        new_tickets = client.ticket_search(TicketCreateTimeNewerDate=last_day, StateType=['new'], QueueIDs=[7,9])
+        last_day = datetime.utcnow() - timedelta(days=10)
+        new_tickets = client.ticket_search(TicketCreateTimeNewerDate=last_day, StateType=['new'])
 
         for ticket_id in new_tickets:
     
@@ -269,17 +270,16 @@ def every_minute():
             # Skip already done tickets
             if TicketNumber in DoneTickets:
                 skipTicket = True
-                pass
             for i in range(len(ArticleArray)):
                 if "API" in ArticleArray[i]["From"]:
-                    #skipTicket = True    
+                    skipTicket = True    
                     pass    
             if skipTicket:
                 print("Ticket#"+TicketNumber+" already done. Skipping...")
                 continue
 
             #Found new ticket:    
-            print("##\n\nGot new ticket to update: "+Title+"\n\n##")    
+            print("\n--##  Got new ticket to update: "+Title+"  ##--")    
 
             CorrectDefaultPrio(client, ticket)
 
