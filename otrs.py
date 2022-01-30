@@ -1,4 +1,4 @@
-DRY_RUN = False
+DRY_RUN = True
 
 VT_UPPRIO_THRESHOLD = 1  # Needed VT hit-Counts for increased priority
 VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-priorization
@@ -155,7 +155,7 @@ def AddNote_VT_Scan_IP(client, ticket):
             ArticleID = ArticleArray[i]['ArticleID']
 
             if ArticleID in DoneArticles:
-                print("Article#"+ArticleID+" already done. Skipping...")
+                print("Article#"+str(ArticleID)+" already done. Skipping...")
                 continue
 
             try:
@@ -177,7 +177,12 @@ def AddNote_VT_Scan_IP(client, ticket):
             except:
                 dst_ip = "" 
 
-                
+            if src_ip == "<MISSING":
+                print("<MISSING detected in SRC_IP")
+                continue
+            if dst_ip == "<MISSING":
+                print("<MISSING detected in DST_IP")
+                continue
             # Handle VT Result and check for fails
             if msg_dst == "Fail" and msg_src == "Fail": #Check if this was a valid IP in both cases
                 continue
