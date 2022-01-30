@@ -158,6 +158,9 @@ def AddNote_VT_Scan_IP(client, ticket):
                 print("Article#"+str(ArticleID)+" already done. Skipping...")
                 continue
 
+            src_ip = ""
+            dst_ip = ""
+            
             try:
 
                 src_ip = re.search('[\n\r].*SOURCE IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'],re.IGNORECASE)[1]
@@ -208,6 +211,8 @@ def AddNote_VT_Scan_IP(client, ticket):
                 all_hits = str(score_src[1]+score_dst[1])
                 all_eng = str(score_src[2]+score_dst[2])
                 end_score = all_hits+"/"+all_eng
+                if(msg_dst == "") and (msg_src == ""):
+                    continue
                 if(msg_dst == ""):
                     VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+src_ip+" -> ("+end_score+")", "Body" : msg_src+msg_dst})
                 if(msg_src == ""):
