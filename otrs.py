@@ -1,4 +1,4 @@
-DRY_RUN = True
+DRY_RUN = False
 
 VT_UPPRIO_THRESHOLD = 1  # Needed VT hit-Counts for increased priority
 VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-priorization
@@ -160,7 +160,7 @@ def AddNote_VT_Scan_IP(client, ticket):
 
             src_ip = ""
             dst_ip = ""
-            
+
             try:
 
                 src_ip = re.search('[\n\r].*SOURCE IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'],re.IGNORECASE)[1]
@@ -169,7 +169,7 @@ def AddNote_VT_Scan_IP(client, ticket):
                 dst_ip = ""  
 
 
-            if msg_src != "Fail": #Check if this was a valid IP
+            if msg_src != "Fail" and msg_src != "Failed scan." and msg_src != "": #Check if this was a valid IP
                 msg_src+="\n\n\n"
             else:
                 msg_src=""
@@ -200,7 +200,7 @@ def AddNote_VT_Scan_IP(client, ticket):
             if msg_dst == "Fail":
                 msg_dst == ""
             else:
-                DoneIPs.append(msg_src)
+                DoneIPs.append(msg_dst)
             if msg_src == "Fail":
                 msg_src == ""
             else:
@@ -213,10 +213,12 @@ def AddNote_VT_Scan_IP(client, ticket):
                 end_score = all_hits+"/"+all_eng
                 if(msg_dst == "") and (msg_src == ""):
                     continue
-                if(msg_dst == ""):
-                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+src_ip+" -> ("+end_score+")", "Body" : msg_src+msg_dst})
-                if(msg_src == ""):
-                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+dst_ip+" -> ("+end_score+")", "Body" : msg_src+msg_dst})
+                if(msg_src == "Failed scan.") and (msg_dst == "Failed scan."):
+                    continue
+                if(msg_dst == "" and msg_src != "Failed scan."):
+                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+src_ip+" -> ("+end_score+")", "Body" : msg_src})
+                if(msg_src == "" and msg_dst != "Failed scan."):
+                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+dst_ip+" -> ("+end_score+")", "Body" : msg_dst})
                 if((msg_src != "") and (msg_dst != "")):
                     VT_Note = Article({"Subject" : "VirusTotal Scan Result for IPs "+src_ip+" / "+dst_ip+" -> ("+end_score+")", "Body" : msg_src+msg_dst})                                 
 
