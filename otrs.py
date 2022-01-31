@@ -2,6 +2,8 @@ DRY_RUN = False
 
 VT_UPPRIO_THRESHOLD = 1  # Needed VT hit-Counts for increased priority
 VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-priorization
+API_KEY = '00d3653d3a9f3c297b1f81b238f92f7a259656f31ad854fd1cee87885134f904'
+
 Def_P4_Tickets = (
 "SURICATA HTTP", 
 "INDICATOR-COMPROMISE png file attachment without matching file magic", 
@@ -94,20 +96,31 @@ def hit_counter(input):
 
 def checkIPinVT(IP):
     score = ("",0,0)
+    msg = ""
+
     try:
         ip = ipaddress.ip_address(IP)
         if ipaddress.ip_address(IP).is_private:
             print("Skipping IP-Check for "+IP+" (private IP)")
-            return "Fail", score
+            return msg, score, True
     except:
         print(IP+" is not a valid IP. Cant check them in VT")
-        return "Fail", score
+        return msg, score, True
 
     url = 'https://www.virustotal.com/api/v3/ip_addresses/'+IP
-    header = {'x-apikey' : '3e94557f84dc6b8b14f4e95118aeddb81473926c3b7773d230a3cc9dd0c176a7'}
+    header = {'x-apikey' : API_KEY}
 
-    response = requests.get(url, headers=header, verify=False)
+    response = requests.get(url, headers=header, verify=True)
     res = response.json()
+
+    # Catch if API quota was exceeded: 
+    try:
+        if res['error']['message'] == "Quota exceeded":
+            print("[WARNING] Exceeded quota for VirusTotal API. Got no result to work with.")
+            return msg, score, True
+    except KeyError:
+        pass
+
     #Check for hits in result
     result = (res['data']['attributes']['last_analysis_stats'])
 
@@ -122,16 +135,19 @@ def checkIPinVT(IP):
         for key in engine_res:
             if(engine_res[key]['category'] == "suspicious"):
                 msg+=pprint.pformat(engine_res[key])+"\n\n"
+
     #Get the Passive DNS resolutions
     url_res = 'https://www.virustotal.com/api/v3/ip_addresses/'+IP+'/resolutions'
     response_res = requests.get(url_res, headers=header, verify=False)
     response_res = response_res.json()
     msg+="\n\n\nPassive DNS Reolutions:\n\n"
+
     for i in range(0,len(response_res['data'])):
         msg+= response_res['data'][i]['attributes']['host_name']+"\n"
         msg+= hit_counter(response_res['data'][i]['attributes']['host_name_last_analysis_stats'])[0]+"\n"
+
     print("### (VT) Prepared following note to OTRS: ### \n\n\n"+msg)
-    return msg, score
+    return msg, score, False
 
 def AddNote_VT_Scan_IP(client, ticket):
 
@@ -139,14 +155,16 @@ def AddNote_VT_Scan_IP(client, ticket):
         Title = ticket.field_get("Title")
         print("AddNote_VT_Scan_IP for: "+Title+"\n")
         ticket_id = ticket.field_get("TicketID")
-        msg_src = "Failed scan."
-        msg_dst = "Failed scan."
         ArticleArray = ticketDict['Ticket']['Article']
         score_src = [0, 0, 0]
         score_dst = [0, 0, 0]
         DoneIPs = []
         DoneIPs.clear()
-        final_score = [0, 0, 0]
+        final_score = [0, 0]
+        err_src = True
+        err_dst = True
+
+        print("Found "+str(len(ArticleArray))+" Articles in the ticket.")
 
 
         for i in range(len(ArticleArray)):
@@ -157,77 +175,69 @@ def AddNote_VT_Scan_IP(client, ticket):
             if ArticleID in DoneArticles:
                 print("Article#"+str(ArticleID)+" already done. Skipping...")
                 continue
+            else:
+                print("Handling Article#"+str(ArticleID)+":\n")
 
-            src_ip = ""
-            dst_ip = ""
 
             try:
 
                 src_ip = re.search('[\n\r].*SOURCE IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'],re.IGNORECASE)[1]
-                msg_src, score_src = checkIPinVT(src_ip)
-            except:
-                dst_ip = ""  
+                print("Parsed Source IP: "+src_ip)
+                msg_src, score_src, err_src = checkIPinVT(src_ip)
 
+            except Exception as e:
+                print("Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
+                print((traceback.format_exc()))
 
-            if msg_src != "Fail" and msg_src != "Failed scan." and msg_src != "": #Check if this was a valid IP
-                msg_src+="\n\n\n"
-            else:
-                msg_src=""
 
             try:
                 dst_ip = re.search('[\n\r].*DESTINATION IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)[1] 
-                msg_dst, score_dst = checkIPinVT(dst_ip)
-            except:
-                dst_ip = "" 
+                print("Parsed Destination IP: "+dst_ip)
+                msg_dst, score_dst, err_dst = checkIPinVT(dst_ip)
 
-            if src_ip == "<MISSING":
-                print("<MISSING detected in SRC_IP")
-                continue
-            if dst_ip == "<MISSING":
-                print("<MISSING detected in DST_IP")
-                continue
-            # Handle VT Result and check for fails
-            if msg_dst == "Fail" and msg_src == "Fail": #Check if this was a valid IP in both cases
-                continue
-            if (msg_dst in ("Failed scan.", "Fail")) and (msg_src in ("Failed scan.", "Fail")):
-                continue
-            if (msg_src) in DoneIPs:
-                print("Skipping Report for VT Result src_ip, because IP was already done in this ticket.")
-                continue
-            if (dst_ip) in DoneIPs:
-                print("Skipping Report for VT Result dest_ip, because IP was already done in this ticket.")
-                continue
-            if msg_dst == "Fail":
-                msg_dst == ""
-            else:
-                DoneIPs.append(msg_dst)
-            if msg_src == "Fail":
-                msg_src == ""
-            else:
-                DoneIPs.append(msg_src)
+            except Exception as e:
+                print("Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
+                print((traceback.format_exc()))
+
 
             # Craft the Note to send to ticket
             try:
                 all_hits = str(score_src[1]+score_dst[1])
                 all_eng = str(score_src[2]+score_dst[2])
                 end_score = all_hits+"/"+all_eng
-                if(msg_dst == "") and (msg_src == ""):
-                    continue
-                if(msg_src == "Failed scan.") and (msg_dst == "Failed scan."):
-                    continue
-                if(msg_dst == "" and msg_src != "Failed scan."):
+
+                if(not err_src):
                     VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+src_ip+" -> ("+end_score+")", "Body" : msg_src})
-                if(msg_src == "" and msg_dst != "Failed scan."):
+                    DoneIPs.append(src_ip)
+                    pprint.pprint(VT_Note)
+
+                    # Update Ticket
+                    if not DRY_RUN:
+                        result = client.ticket_update(ticket_id, VT_Note)
+                    else:
+                        print("(Would update ticket now, but this is a dry run...)")
+
+                elif(not err_dst):
                     VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+dst_ip+" -> ("+end_score+")", "Body" : msg_dst})
-                if((msg_src != "") and (msg_dst != "")):
-                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IPs "+src_ip+" / "+dst_ip+" -> ("+end_score+")", "Body" : msg_src+msg_dst})                                 
+                    DoneIPs.append(dst_ip)
+                    pprint.pprint(VT_Note)
 
-                if not DRY_RUN:
-                    result = client.ticket_update(ticket_id, VT_Note)
+                    # Update Ticket
+                    if not DRY_RUN:
+                        result = client.ticket_update(ticket_id, VT_Note)
+                    else:
+                        print("(Would update ticket now, but this is a dry run...)")
+
                 else:
-                    print("(dry run)")
+                    print("Skipped Articel because of errors in both src_ip as well as dst_ip.")
 
-                pprint.pprint(VT_Note)
+
+
+                # Reset values
+                src_ip = ""
+                dst_ip = ""
+                msg_src = ""
+                msg_dst = ""
 
             except Exception as e:
                 print("Error in AddNote_VT_Scan_IP > Add Note / Note Update for ArticleID: "+str(ArticleID))
@@ -235,14 +245,15 @@ def AddNote_VT_Scan_IP(client, ticket):
                 pass
             
             #Count final score
-            final_score[1] += (score_src[1]+score_dst[1])
-            final_score[2] += (score_src[2]+score_dst[2])
+            final_score[0] += (score_src[1]+score_dst[1])
+            final_score[1] += (score_src[2]+score_dst[2])
+            print("Final score: "+str(final_score[0])+"/"+str(final_score[1]))
 
 
         ## Ticket done ##
 
         #Update state?
-        updated_state = UpdatePrio(client, ticket, final_score[1], final_score[2])
+        updated_state = UpdatePrio(client, ticket, final_score[0], final_score[1])
 
         if updated_state != "closed!":
             if not DRY_RUN:
