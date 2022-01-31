@@ -1,4 +1,4 @@
-DRY_RUN = False
+DRY_RUN = True
 
 VT_UPPRIO_THRESHOLD = 1  # Needed VT hit-Counts for increased priority
 VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-priorization
@@ -16,7 +16,7 @@ Def_P4_Tickets = (
 DoneTickets = [1]
 DoneArticles = [1]
 
-from ssl import ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE
+from ssl import ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE, ALERT_DESCRIPTION_UNKNOWN_PSK_IDENTITY
 from typing import KeysView
 from pyotrs import Client
 from pyotrs.lib import Article, Ticket
@@ -185,6 +185,9 @@ def AddNote_VT_Scan_IP(client, ticket):
                 print("Parsed Source IP: "+src_ip)
                 msg_src, score_src, err_src = checkIPinVT(src_ip)
 
+            except TypeError: # If no IP was found...
+                pass
+
             except Exception as e:
                 print("Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
                 print((traceback.format_exc()))
@@ -194,6 +197,9 @@ def AddNote_VT_Scan_IP(client, ticket):
                 dst_ip = re.search('[\n\r].*DESTINATION IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)[1] 
                 print("Parsed Destination IP: "+dst_ip)
                 msg_dst, score_dst, err_dst = checkIPinVT(dst_ip)
+
+            except TypeError:
+                pass
 
             except Exception as e:
                 print("Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
@@ -231,13 +237,13 @@ def AddNote_VT_Scan_IP(client, ticket):
                 else:
                     print("Skipped Articel because of errors in both src_ip as well as dst_ip.")
 
-
-
                 # Reset values
                 src_ip = ""
                 dst_ip = ""
                 msg_src = ""
                 msg_dst = ""
+
+                DoneArticles.append(ArticleID)
 
             except Exception as e:
                 print("Error in AddNote_VT_Scan_IP > Add Note / Note Update for ArticleID: "+str(ArticleID))
@@ -339,6 +345,7 @@ def UpdatePrio(client, ticket, hits, engines):
         
 
 def every_minute():
+    try:
         print("Executing scheudeled task (1 min):\n\n")
         client = Client("http://cloud.swiftbird.de/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST","SIEMUser","9f5d8ccf63f8a3e9fb874d32ac5d6a4ca9cc88574b2fbfd3f4bca9a8bbf636cd")
         client.session_create()
@@ -365,7 +372,9 @@ def every_minute():
                 for i in range(len(ArticleArray)):
                     # If an Article from API was after an Article -> mark the article as done and skip
                     if "API" in ArticleArray[i]["From"]:
-                        DoneArticles.append(ArticleArray[i-1]["ArticleID"])
+                        for j in range(len(ArticleArray)):
+                            print(j)
+                            DoneArticles.append(ArticleArray[i - j]["ArticleID"])
                         pass    
                 if skipTicket:
                     print("Ticket#"+TicketNumber+" already done. Skipping...")
@@ -386,7 +395,12 @@ def every_minute():
             DoneTickets.append(TicketNumber)
 
         print("\n\nSheudled task (1min) done.\nNext start in 60 seconds...")
-        return            
+        return  
+
+    except Exception as e:
+        print("[ERROR] Error in every_minute()")
+        print((traceback.format_exc()))
+        pass          
 
 def main():
     print("Started OTRS-API-Orchestrator")
@@ -402,6 +416,7 @@ def main():
             sys.exit(0)
         except SystemExit:
             os._exit(0)
+
 
 
 if __name__ == "__main__":
