@@ -14,7 +14,8 @@ Def_P4_Tickets = (
 "alerts on Ipad"
 )
 DoneTickets = [1]
-DoneArticles = [1]
+DoneIPArticles = [1]
+DoneDNSArticles = [1]
 
 from ssl import ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE, ALERT_DESCRIPTION_UNKNOWN_PSK_IDENTITY
 from typing import KeysView
@@ -172,8 +173,8 @@ def AddNote_VT_Scan_IP(client, ticket):
             # Skip already done Articles...
             ArticleID = ArticleArray[i]['ArticleID']
 
-            if ArticleID in DoneArticles:
-                print("Article#"+str(ArticleID)+" already done. Skipping...")
+            if ArticleID in DoneIPArticles:
+                print("Article#"+str(ArticleID)+" already done or other API response. Skipping...")
                 continue
             else:
                 print("Handling Article#"+str(ArticleID)+":\n")
@@ -243,7 +244,7 @@ def AddNote_VT_Scan_IP(client, ticket):
                 msg_src = ""
                 msg_dst = ""
 
-                DoneArticles.append(ArticleID)
+                DoneIPArticles.append(ArticleID)
 
             except Exception as e:
                 print("Error in AddNote_VT_Scan_IP > Add Note / Note Update for ArticleID: "+str(ArticleID))
@@ -266,6 +267,126 @@ def AddNote_VT_Scan_IP(client, ticket):
                 print("Result of final ticket update: "+str(client.ticket_update(ticket_id, StateType="new", State="new")))
             else:
                 print("Result of final ticket update: (dry run)") 
+
+
+def AddNote_VT_Scan_DNS(client, ticket):
+
+        ticketDict = ticket.to_dct()
+        Title = ticket.field_get("Title")
+        print("AddNote_VT_Scan_IP for: "+Title+"\n")
+        ticket_id = ticket.field_get("TicketID")
+        ArticleArray = ticketDict['Ticket']['Article']
+        score_src = [0, 0, 0]
+        score_dst = [0, 0, 0]
+        DoneIPs = []
+        DoneIPs.clear()
+        final_score = [0, 0]
+        err_src = True
+        err_dst = True
+
+        print("Found "+str(len(ArticleArray))+" Articles in the ticket.")
+
+
+        for i in range(len(ArticleArray)):
+
+            # Skip already done Articles...
+            ArticleID = ArticleArray[i]['ArticleID']
+
+            if ArticleID in DoneDNSArticles:
+                print("Article#"+str(ArticleID)+" already done or other API response. Skipping...")
+                continue
+            else:
+                print("Handling Article#"+str(ArticleID)+":\n")
+
+
+            try:
+
+                src_ip = re.search('[\n\r].*SOURCE IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'],re.IGNORECASE)[1]
+                print("Parsed Source IP: "+src_ip)
+                msg_src, score_src, err_src = checkIPinVT(src_ip)
+
+            except TypeError: # If no IP was found...
+                pass
+
+            except Exception as e:
+                print("Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
+                print((traceback.format_exc()))
+
+
+            try:
+                dst_ip = re.search('[\n\r].*DESTINATION IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)[1] 
+                print("Parsed Destination IP: "+dst_ip)
+                msg_dst, score_dst, err_dst = checkIPinVT(dst_ip)
+
+            except TypeError:
+                pass
+
+            except Exception as e:
+                print("Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
+                print((traceback.format_exc()))
+
+
+            # Craft the Note to send to ticket
+            try:
+                all_hits = str(score_src[1]+score_dst[1])
+                all_eng = str(score_src[2]+score_dst[2])
+                end_score = all_hits+"/"+all_eng
+
+                if(not err_src):
+                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+src_ip+" -> ("+end_score+")", "Body" : msg_src})
+                    DoneIPs.append(src_ip)
+                    pprint.pprint(VT_Note)
+
+                    # Update Ticket
+                    if not DRY_RUN:
+                        result = client.ticket_update(ticket_id, VT_Note)
+                    else:
+                        print("(Would update ticket now, but this is a dry run...)")
+
+                elif(not err_dst):
+                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+dst_ip+" -> ("+end_score+")", "Body" : msg_dst})
+                    DoneIPs.append(dst_ip)
+                    pprint.pprint(VT_Note)
+
+                    # Update Ticket
+                    if not DRY_RUN:
+                        result = client.ticket_update(ticket_id, VT_Note)
+                    else:
+                        print("(Would update ticket now, but this is a dry run...)")
+
+                else:
+                    print("Skipped Articel because of errors in both src_ip as well as dst_ip.")
+
+                # Reset values
+                src_ip = ""
+                dst_ip = ""
+                msg_src = ""
+                msg_dst = ""
+
+                DoneIPArticles.append(ArticleID)
+
+            except Exception as e:
+                print("Error in AddNote_VT_Scan_IP > Add Note / Note Update for ArticleID: "+str(ArticleID))
+                print((traceback.format_exc()))
+                pass
+            
+            #Count final score
+            final_score[0] += (score_src[1]+score_dst[1])
+            final_score[1] += (score_src[2]+score_dst[2])
+            print("Final score: "+str(final_score[0])+"/"+str(final_score[1]))
+
+
+        ## Ticket done ##
+
+        #Update state?
+        updated_state = UpdatePrio(client, ticket, final_score[0], final_score[1])
+
+        if updated_state != "closed!":
+            if not DRY_RUN:
+                print("Result of final ticket update: "+str(client.ticket_update(ticket_id, StateType="new", State="new")))
+            else:
+                print("Result of final ticket update: (dry run)") 
+
 
 
 def SetTicketPrio(client, ticket, prio):
@@ -365,17 +486,25 @@ def every_minute():
             # Skip already done tickets
             try:
                 if TicketNumber in DoneTickets:
-                    #skipTicket = True
-                    # Setting this off because of the new implementation of Article based done-Check
-                    pass
+                    skipTicket = True
 
                 for i in range(len(ArticleArray)):
                     # If an Article from API was after an Article -> mark the article as done and skip
-                    if "API" in ArticleArray[i]["From"]:
+                    if "API" in ArticleArray[i]["From"] and " IP " in ArticleArray[i]["Subject"]:
                         for j in range(len(ArticleArray)):
                             print(j)
-                            DoneArticles.append(ArticleArray[i - j]["ArticleID"])
-                        pass    
+                            DoneIPArticles.append(ArticleArray[i - j]["ArticleID"])
+                        pass
+
+                for i in range(len(ArticleArray)):
+                    # If an Article from API was after an Article -> mark the article as done and skip
+                    if "API" in ArticleArray[i]["From"] and " DNS " in ArticleArray[i]["Subject"]:
+                        for j in range(len(ArticleArray)):
+                            print(j)
+                            DoneDNSArticles.append(ArticleArray[i - j]["ArticleID"])
+                        pass  
+
+
                 if skipTicket:
                     print("Ticket#"+TicketNumber+" already done. Skipping...")
                     continue
