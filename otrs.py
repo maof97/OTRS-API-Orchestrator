@@ -4,6 +4,15 @@ VT_UPPRIO_THRESHOLD = 1  # Needed VT hit-Counts for increased priority
 VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-priorization
 API_KEY = '00d3653d3a9f3c297b1f81b238f92f7a259656f31ad854fd1cee87885134f904'
 
+FP_Domains = (
+    "api.telegram.org"
+)
+
+FP_IPs = (
+    "1.1.1.1"
+)
+
+
 Def_P4_Tickets = (
 "SURICATA HTTP", 
 "INDICATOR-COMPROMISE png file attachment without matching file magic", 
@@ -34,6 +43,9 @@ import signal
 import time
 import traceback
 import os
+import validators
+import base64
+
 
 def every(delay, task):
   next_time = time.time() + delay
@@ -85,33 +97,101 @@ class GracefulInterruptHandler(object):
 
         return True
 
-def up_prio(TicketID):
-    ticket = client.ticket_get_by_id(ticket_id)
-    CurrentPrio = ticket.field_get("Priority")
-    print(CurrentPrio)
 
 def hit_counter(input): 
     bad_hits = input['malicious']+input['suspicious']
     good_hits = input['harmless']
     return str(bad_hits)+"/"+str(good_hits), bad_hits, good_hits
 
-def checkIPinVT(IP):
+
+
+def HandleFalsePositives(client, ticket, type, input):
+    
+    # Handle FP Domains
+    if(type == "Domain" or "IP"):
+
+        if input in FP_Domains or input in FP_IPs:
+            Title = ticket.field_get("Title")
+            ticket_id = ticket.field_get("TicketID")
+            current_prio = int(ticket.field_get("Priority")[0])
+
+            print("Strongly decreasing ticket priority (down 2) because of known false-positive domain/ip: "+input)
+
+            new_prio = (current_prio +2)
+            if new_prio == 5:
+                Note = Article({"Subject" : "Closed Ticket", "Body" : "Because of known false-positive domain/ip for the given connection and the ticket being priority 3 or 4, the ticket was closed automatically."})
+                result = "(dry run)"
+                if not DRY_RUN:
+                    result = client.ticket_update(ticket_id, Note) 
+
+                result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")
+                print("Closed ticket: "+Title)    
+                return "closed!"      
+            else:
+                SetTicketPrio(client, ticket, new_prio)
+                Note = Article({"Subject" : "Decreased Priority to "+str(new_prio), "Body" : "Because of known false-positive domain/ip '"+input+"' for the given connection, the priority was drastically was decreased (minus 2)."})
+                result = "(dry run)"
+                if not DRY_RUN:
+                    result = client.ticket_update(ticket_id, Note)
+            return
+
+
+
+def checkVT(type, input):
     score = ("",0,0)
     msg = ""
-
-    try:
-        ip = ipaddress.ip_address(IP)
-        if ipaddress.ip_address(IP).is_private:
-            print("Skipping IP-Check for "+IP+" (private IP)")
-            return msg, score, True
-    except:
-        print(IP+" is not a valid IP. Cant check them in VT")
-        return msg, score, True
-
-    url = 'https://www.virustotal.com/api/v3/ip_addresses/'+IP
     header = {'x-apikey' : API_KEY}
+    
+    if type == "IP":
+        print("Scanning IP '"+input+"'...")
 
-    response = requests.get(url, headers=header, verify=True)
+        try:
+            ip = ipaddress.ip_address(input)
+            if ipaddress.ip_address(input).is_private:
+                print("Skipping IP-Check for "+input+" (private IP)")
+                return msg, score, True
+        except:
+            print(input+" is not a valid IP. Cant check them in VT")
+            return msg, score, True
+
+        url = 'https://www.virustotal.com/api/v3/ip_addresses/'+input
+
+        response = requests.get(url, headers=header, verify=True)
+
+    elif type == "URL":
+        print("Scanning URL '"+input+"'...")
+
+        if not validators.url(input):
+            print("[WARNING] URL to be scanned by VT seems to be invalid: "+input)
+            return msg, score, True
+
+        url_id = base64.urlsafe_b64encode("http://www.somedomain.com/this/is/my/url".encode()).decode().strip("=")
+
+        vt_url = "https://www.virustotal.com/api/v3/urls"
+
+        payload = "url="+url_id
+        headers = {
+            "Accept": "application/json",
+            "x-apikey": API_KEY,
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+
+        response_url_req = requests.request("POST", vt_url, data=payload, headers=headers)
+        response_url_req_json = response_url_req.json()
+        id_url_analysis = response_url_req_json["data"]["id"]
+        print("Got URL Scan response. ID: "+id_url_analysis)
+
+        url = 'https://www.virustotal.com/api/v3/analyses/'+id_url_analysis
+        response = requests.get(url, headers=header, verify=True)       
+
+
+    elif type == "Domain":
+        print("Scanning Domain '"+input+"'...")
+
+        url = 'https://www.virustotal.com/api/v3/domains/'+input
+        response = requests.get(url, headers=header, verify=True)
+
+
     res = response.json()
 
     # Catch if API quota was exceeded: 
@@ -126,7 +206,7 @@ def checkIPinVT(IP):
     result = (res['data']['attributes']['last_analysis_stats'])
 
     score = hit_counter(result)
-    msg = ("## VirusTotal Scan of IP "+IP+" ##\n\n\nIP has a result of "+ score[0])
+    msg = ("## VirusTotal Scan of Input "+input+" ##\n\n\nIP has a result of "+ score[0])
     if score[1]>0:
         msg += "\n\n"
         engine_res = res['data']['attributes']['last_analysis_results']
@@ -138,17 +218,19 @@ def checkIPinVT(IP):
                 msg+=pprint.pformat(engine_res[key])+"\n\n"
 
     #Get the Passive DNS resolutions
-    url_res = 'https://www.virustotal.com/api/v3/ip_addresses/'+IP+'/resolutions'
-    response_res = requests.get(url_res, headers=header, verify=False)
-    response_res = response_res.json()
-    msg+="\n\n\nPassive DNS Reolutions:\n\n"
+    if type == "IP":
+        url_res = 'https://www.virustotal.com/api/v3/ip_addresses/'+input+'/resolutions'
+        response_res = requests.get(url_res, headers=header, verify=False)
+        response_res = response_res.json()
+        msg+="\n\n\nPassive DNS Reolutions:\n\n"
 
-    for i in range(0,len(response_res['data'])):
-        msg+= response_res['data'][i]['attributes']['host_name']+"\n"
-        msg+= hit_counter(response_res['data'][i]['attributes']['host_name_last_analysis_stats'])[0]+"\n"
+        for i in range(0,len(response_res['data'])):
+            msg+= response_res['data'][i]['attributes']['host_name']+"\n"
+            msg+= hit_counter(response_res['data'][i]['attributes']['host_name_last_analysis_stats'])[0]+"\n"
 
     print("### (VT) Prepared following note to OTRS: ### \n\n\n"+msg)
     return msg, score, False
+
 
 def AddNote_VT_Scan_IP(client, ticket):
 
@@ -184,7 +266,7 @@ def AddNote_VT_Scan_IP(client, ticket):
 
                 src_ip = re.search('[\n\r].*SOURCE IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'],re.IGNORECASE)[1]
                 print("Parsed Source IP: "+src_ip)
-                msg_src, score_src, err_src = checkIPinVT(src_ip)
+                msg_src, score_src, err_src = checkVT("IP", src_ip)
 
             except TypeError: # If no IP was found...
                 pass
@@ -197,7 +279,7 @@ def AddNote_VT_Scan_IP(client, ticket):
             try:
                 dst_ip = re.search('[\n\r].*DESTINATION IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)[1] 
                 print("Parsed Destination IP: "+dst_ip)
-                msg_dst, score_dst, err_dst = checkIPinVT(dst_ip)
+                msg_dst, score_dst, err_dst = checkVT("IP", dst_ip)
 
             except TypeError:
                 pass
@@ -236,7 +318,7 @@ def AddNote_VT_Scan_IP(client, ticket):
                         print("(Would update ticket now, but this is a dry run...)")
 
                 else:
-                    print("Skipped Articel because of errors in both src_ip as well as dst_ip.")
+                    print("Skipped Article because of errors in both src_ip as well as dst_ip.")
 
                 # Reset values
                 src_ip = ""
@@ -269,7 +351,7 @@ def AddNote_VT_Scan_IP(client, ticket):
                 print("Result of final ticket update: (dry run)") 
 
 
-def AddNote_VT_Scan_DNS(client, ticket):
+def AddNote_VT_Scan_Domain(client, ticket):
 
         ticketDict = ticket.to_dct()
         Title = ticket.field_get("Title")
@@ -278,11 +360,12 @@ def AddNote_VT_Scan_DNS(client, ticket):
         ArticleArray = ticketDict['Ticket']['Article']
         score_src = [0, 0, 0]
         score_dst = [0, 0, 0]
-        DoneIPs = []
-        DoneIPs.clear()
+        DoneDomains = []
         final_score = [0, 0]
-        err_src = True
-        err_dst = True
+        err_vt = True
+        domain = None
+        url = None
+        foundURL = False
 
         print("Found "+str(len(ArticleArray))+" Articles in the ticket.")
 
@@ -298,32 +381,37 @@ def AddNote_VT_Scan_DNS(client, ticket):
             else:
                 print("Handling Article#"+str(ArticleID)+":\n")
 
-
             try:
-
-                src_ip = re.search('[\n\r].*SOURCE IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'],re.IGNORECASE)[1]
-                print("Parsed Source IP: "+src_ip)
-                msg_src, score_src, err_src = checkIPinVT(src_ip)
-
-            except TypeError: # If no IP was found...
-                pass
+                path = re.search('"url":"([^"]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                if path != None: # Url found - get hostname
+                    domain = re.search('{"hostname":"([^"]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                    foundURL = True
+                else:
+                    domain = re.search('[\n\r].*Domain:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'],re.IGNORECASE)
+                    if domain == None or domain[1] == "<MISSING":
+                        domain = re.search('\{"sni":"([^"]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                        if domain == None:
+                            domain = re.search('{"hostname":"([^"]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                            if domain == None:
+                                payload = re.search('.*?"payload_printable"\s?:\s?"([^"]+)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                                if payload != None:
+                                    domain = re.search('([a-z0-9][a-z0-9-_]{2,61}[a-z0-9]{0,1})\.([a-z0-9\-]{1,61}|[a-z0-9-]{1,30})\.([a-z]{2,})', payload[1], re.IGNORECASE)                        
 
             except Exception as e:
-                print("Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
+                print("Error in AddNote_VT_Scan_Domain > Regex Domain/ Return MSG for ArticleID: "+str(ArticleID))
                 print((traceback.format_exc()))
 
 
-            try:
-                dst_ip = re.search('[\n\r].*DESTINATION IP:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)[1] 
-                print("Parsed Destination IP: "+dst_ip)
-                msg_dst, score_dst, err_dst = checkIPinVT(dst_ip)
+            if foundURL:
+                print("Found URL: "+domain+path)
+                msg_src, score_src, err_vt = checkVT("URL", domain+path)
+            elif domain != None and domain[1] != "<MISSING":
+                domain = domain[1]
+                print("Found Domain: "+domain)
+                msg_src, score_src, err_vt = checkVT("Domain", domain)
+            else:
+                print("No Domain/URL in Article.")
 
-            except TypeError:
-                pass
-
-            except Exception as e:
-                print("Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
-                print((traceback.format_exc()))
 
 
             # Craft the Note to send to ticket
@@ -332,9 +420,11 @@ def AddNote_VT_Scan_DNS(client, ticket):
                 all_eng = str(score_src[2]+score_dst[2])
                 end_score = all_hits+"/"+all_eng
 
-                if(not err_src):
-                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+src_ip+" -> ("+end_score+")", "Body" : msg_src})
-                    DoneIPs.append(src_ip)
+                if(not err_vt):
+                    VT_Note = Article({"Subject" : "VirusTotal DNS Scan Result for '"+domain+"' ("+end_score+")", "Body" : msg_src})
+                    DoneDNSArticles.append(domain)
+                    DoneDomains.append(domain)
+
                     pprint.pprint(VT_Note)
 
                     # Update Ticket
@@ -343,30 +433,21 @@ def AddNote_VT_Scan_DNS(client, ticket):
                     else:
                         print("(Would update ticket now, but this is a dry run...)")
 
-                elif(not err_dst):
-                    VT_Note = Article({"Subject" : "VirusTotal Scan Result for IP "+dst_ip+" -> ("+end_score+")", "Body" : msg_dst})
-                    DoneIPs.append(dst_ip)
-                    pprint.pprint(VT_Note)
-
-                    # Update Ticket
-                    if not DRY_RUN:
-                        result = client.ticket_update(ticket_id, VT_Note)
-                    else:
-                        print("(Would update ticket now, but this is a dry run...)")
+                    # Is this a FP?
+                    HandleFalsePositives(client, ticket, "Domain", domain)
 
                 else:
-                    print("Skipped Articel because of errors in both src_ip as well as dst_ip.")
+                    print("Skipped Article because Domain could not be found/searched.")
 
                 # Reset values
-                src_ip = ""
-                dst_ip = ""
-                msg_src = ""
-                msg_dst = ""
+                domain = None
+                path = None
+                foundURL = False
 
                 DoneIPArticles.append(ArticleID)
 
             except Exception as e:
-                print("Error in AddNote_VT_Scan_IP > Add Note / Note Update for ArticleID: "+str(ArticleID))
+                print("Error in AddNote_VT_Domain > Add Note / Note Update for ArticleID: "+str(ArticleID))
                 print((traceback.format_exc()))
                 pass
             
@@ -421,7 +502,7 @@ def CorrectDefaultPrio(client, ticket):
 def UpdatePrio(client, ticket, hits, engines):
     Title = ticket.field_get("Title")
     # Suricata
-    if "Suricata" in Title:
+    if True:
         #Increase Prio if needed
         if hits >= VT_UPPRIO_THRESHOLD: #>=1
             Title = ticket.field_get("Title")
@@ -461,7 +542,8 @@ def UpdatePrio(client, ticket, hits, engines):
                 result = "(dry run)"
                 if not DRY_RUN:
                     result = client.ticket_update(ticket_id, Note)
-            return
+
+
 
         
 
@@ -518,6 +600,7 @@ def every_minute():
 
             #result, hits_vt, engines_vt = 
             AddNote_VT_Scan_IP(client, ticket)
+            AddNote_VT_Scan_Domain(client, ticket)
             #if result != 0: (Now in AddNote function aboe (per-Article))
             #    updated_state = UpdatePrio(client, ticket, hits_vt, engines_vt)
                          
