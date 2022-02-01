@@ -123,8 +123,7 @@ def HandleFalsePositives(client, ticket, type, input):
                 result = "(dry run)"
                 if not DRY_RUN:
                     result = client.ticket_update(ticket_id, Note) 
-
-                result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")
+                    result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")
                 print("Closed ticket: "+Title)    
                 return "closed!"      
             else:
@@ -532,8 +531,7 @@ def UpdatePrio(client, ticket, hits, engines):
                 result = "(dry run)"
                 if not DRY_RUN:
                     result = client.ticket_update(ticket_id, Note) 
-
-                result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")
+                    result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")
                 print("Closed ticket: "+Title)    
                 return "closed!"      
             else:
