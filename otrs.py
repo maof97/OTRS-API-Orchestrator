@@ -200,9 +200,14 @@ def checkVT(type, input):
             return msg, score, True
     except KeyError:
         pass
-
-    #Check for hits in result
-    result = (res['data']['attributes']['last_analysis_stats'])
+    
+    try:
+        # Check for hits in result
+        result = (res['data']['attributes']['last_analysis_stats'])
+    except Exception as e:
+        print("[WARNING] Non-Fatal Error in VT Scan result fetching.")
+        print((traceback.format_exc()))
+        return msg, score, True
 
     score = hit_counter(result)
     msg = ("## VirusTotal Scan of Input "+input+" ##\n\n\nIP has a result of "+ score[0])
@@ -271,7 +276,7 @@ def AddNote_VT_Scan_IP(client, ticket):
                 pass
 
             except Exception as e:
-                print("Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
+                print("[WARNING] Non-Fatal Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
                 print((traceback.format_exc()))
 
 
@@ -284,7 +289,7 @@ def AddNote_VT_Scan_IP(client, ticket):
                 pass
 
             except Exception as e:
-                print("Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
+                print("[WARNING] Non-Fatal Error in AddNote_VT_Scan_IP > Regex Src_IP/ Return MSG for ArticleID: "+str(ArticleID))
                 print((traceback.format_exc()))
 
 
@@ -328,7 +333,7 @@ def AddNote_VT_Scan_IP(client, ticket):
                 DoneIPArticles.append(ArticleID)
 
             except Exception as e:
-                print("Error in AddNote_VT_Scan_IP > Add Note / Note Update for ArticleID: "+str(ArticleID))
+                print("[WARNING] Non-Fatal Error in AddNote_VT_Scan_IP > Add Note / Note Update for ArticleID: "+str(ArticleID))
                 print((traceback.format_exc()))
                 pass
             
@@ -397,11 +402,13 @@ def AddNote_VT_Scan_Domain(client, ticket):
                                     domain = re.search('([a-z0-9][a-z0-9-_]{2,61}[a-z0-9]{0,1})\.([a-z0-9\-]{1,61}|[a-z0-9-]{1,30})\.([a-z]{2,})', payload[1], re.IGNORECASE)                        
 
             except Exception as e:
-                print("Error in AddNote_VT_Scan_Domain > Regex Domain/ Return MSG for ArticleID: "+str(ArticleID))
+                print("[WARNING] Non-Fatal Error in AddNote_VT_Scan_Domain > Regex Domain/ Return MSG for ArticleID: "+str(ArticleID))
                 print((traceback.format_exc()))
 
 
             if foundURL:
+                domain = domain[1]
+                path = path[1]
                 print("Found URL: "+domain+path)
                 msg_src, score_src, err_vt = checkVT("URL", domain+path)
             elif domain != None and domain[1] != "<MISSING":
@@ -446,7 +453,7 @@ def AddNote_VT_Scan_Domain(client, ticket):
                 DoneIPArticles.append(ArticleID)
 
             except Exception as e:
-                print("Error in AddNote_VT_Domain > Add Note / Note Update for ArticleID: "+str(ArticleID))
+                print("[WARNING] Non-Fatal Error in AddNote_VT_Domain > Add Note / Note Update for ArticleID: "+str(ArticleID))
                 print((traceback.format_exc()))
                 pass
             
@@ -589,7 +596,7 @@ def every_minute():
                     print("Ticket#"+TicketNumber+" already done. Skipping...")
                     continue
             except:
-                print("There was an Error in Skipping already done tickets (every_minute).\n")
+                print("[WARNING] There was an Error in Skipping already done tickets (every_minute).\n")
 
             #Found new ticket:    
             print("\n--##  Got new ticket to update: "+Title+"  ##--")    
@@ -608,7 +615,7 @@ def every_minute():
         return  
 
     except Exception as e:
-        print("[ERROR] Error in every_minute()")
+        print("[WARNING] Non-Fatal Error in every_minute()")
         print((traceback.format_exc()))
         pass          
 
