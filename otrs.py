@@ -1,6 +1,7 @@
 CLIENT_URL = "http://cloud.swiftbird.de:8077/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST"
 VT_UPPRIO_THRESHOLD = 1  # Needed VT hit-Counts for increased priority
 VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-priorization
+TELEGRAM_ALERT_PRIO = 4  # On which (exact or lower) priority level to send a Telegram Alert if a new ticket was processed. Default: 2
 
 # You need to export the following env. vars like this:
 # export OTRS_USER_PW="myotrsuserpw"
@@ -8,6 +9,10 @@ VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-prioriza
 
 # For script to actually update tickets in OTRS also set:
 # export OTRS_ORCH_PROD='True'
+
+# For Telegram Alerts:
+# export TELEGRAM_BOT_KEY="botXXX"
+# export TELEGRAM_BOT_CHATID="-123456"
 
 FP_Domains = (
     "api.telegram.org"
@@ -34,6 +39,7 @@ DoneDNSArticles = [1]
 
 # Start of Script #
 from ssl import ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE, ALERT_DESCRIPTION_UNKNOWN_PSK_IDENTITY
+from termios import TIOCPKT_FLUSHWRITE
 from typing import KeysView
 from pyotrs import Client
 from pyotrs.lib import Article, Ticket
@@ -56,6 +62,8 @@ from distutils import util
 
 VT_API_KEY = os.environ['VT_API_KEY']
 OTRS_USER_PW = os.environ['OTRS_USER_PW']
+TELEGRAM_BOT_KEY = os.environ['TELEGRAM_BOT_KEY']
+TELEGRAM_BOT_CHATID = os.environ['TELEGRAM_BOT_CHATID']
 try:
     DRY_RUN = not bool(util.strtobool(os.environ['OTRS_ORCH_PROD']))
 except:
@@ -584,14 +592,38 @@ def UpdatePrio(client, ticket, hits, engines):
 
 
 
+def Alert_Ticket(client, ticket):
+    try:
+        Title = ticket.field_get("Title")
+        ticket_id = ticket.field_get("TicketID")
+        Priority = int(ticket.field_get("Priority")[0])
+        print("Alerting ticket #"+str(ticket_id)+" "+Title)
+        req_path = "/"+TELEGRAM_BOT_KEY+"/sendMessage?chat_id="+TELEGRAM_BOT_CHATID+"&parse_mode=markdown&text="
+        #AT_PERSON = "@Martin "
+
+        if(Priority <= TELEGRAM_ALERT_PRIO):
+            msg = " **New Ticket: _"+Title+"_** <br> + Current Prio: "+str(Priority)+""
+            res = requests.post("https://api.telegram.org"+req_path+msg)
+            if(res != "<Response [200]>"):
+                print("[WARNING] Could not send Telegram Alert in Alert_Ticket() -> Reponse not OK (200)")
+                print(res.json())
+            return
+    except Exception as e:
+        print("[WARNING] Non-Fatal Error in Alert_Ticket()")
+        print((traceback.format_exc()))
+        return   
+
         
+
+        
+
 
 def every_minute():
     try:
         print("Executing scheudeled task (1 min):\n\n")
         client = Client(CLIENT_URL,"SIEMUser",OTRS_USER_PW)
         client.session_create()
-        last_day = datetime.utcnow() - timedelta(days=10)
+        last_day = datetime.utcnow() - timedelta(days=1)
         new_tickets = client.ticket_search(TicketCreateTimeNewerDate=last_day, StateType=['new'])
 
         for ticket_id in new_tickets:
@@ -613,7 +645,6 @@ def every_minute():
                     # If an Article from API was after an Article -> mark the article as done and skip
                     if "API" in ArticleArray[i]["From"] and " IP " in ArticleArray[i]["Subject"]:
                         for j in range(len(ArticleArray)):
-                            print(j)
                             DoneIPArticles.append(ArticleArray[i - j]["ArticleID"])
                         pass
 
@@ -621,7 +652,6 @@ def every_minute():
                     # If an Article from API was after an Article -> mark the article as done and skip
                     if "API" in ArticleArray[i]["From"] and " DNS " in ArticleArray[i]["Subject"]:
                         for j in range(len(ArticleArray)):
-                            print(j)
                             DoneDNSArticles.append(ArticleArray[i - j]["ArticleID"])
                         pass  
 
@@ -633,18 +663,21 @@ def every_minute():
                 print("[WARNING] There was an Error in Skipping already done tickets (every_minute).\n")
 
             #Found new ticket:    
-            print("\n--##  Got new ticket to update: "+Title+"  ##--")    
+            print("---- Handling new ticket:----\n#"+ticket_id+" "+Title)  
 
             CorrectDefaultPrio(client, ticket)
 
             #result, hits_vt, engines_vt = 
             AddNote_VT_Scan_IP(client, ticket)
             AddNote_VT_Scan_Domain(client, ticket)
+            Alert_Ticket(client, ticket)
             #if result != 0: (Now in AddNote function aboe (per-Article))
             #    updated_state = UpdatePrio(client, ticket, hits_vt, engines_vt)
                          
             DoneTickets.append(TicketNumber)
 
+        print("\n# Done Tickets this round: #\n\n")
+        print(DoneTickets)
         print("\n\nSheudled task (1min) done.\nNext start in 60 seconds...")
         return  
 
