@@ -1,4 +1,5 @@
-CLIENT_URL = "http://cloud.swiftbird.de:8077/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST"
+CLIENT_DOMAIN = "http://otrs.cloud.swiftbird.de:8077"
+CLIENT_URL = CLIENT_DOMAIN+"/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST"
 VT_UPPRIO_THRESHOLD = 1  # Needed VT hit-Counts for increased priority
 VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-priorization
 TELEGRAM_ALERT_PRIO = 4  # On which (exact or lower) priority level to send a Telegram Alert if a new ticket was processed. Default: 2
@@ -602,7 +603,7 @@ def Alert_Ticket(client, ticket):
         #AT_PERSON = "@Martin "
 
         if(Priority <= TELEGRAM_ALERT_PRIO):
-            msg = " **New Ticket: _"+Title+"_** <br> + Current Prio: "+str(Priority)+""
+            msg = " %2A%2ANew Ticket: _"+Title+"_%2A%2A%0A%0ACurrent Prio: "+str(Priority)+ "%0A%0ALink: "+CLIENT_DOMAIN+"/otrs/index.pl?Action=AgentTicketZoom;TicketID="+str(ticket_id)
             res = requests.post("https://api.telegram.org"+req_path+msg)
             if(res != "<Response [200]>"):
                 print("[WARNING] Could not send Telegram Alert in Alert_Ticket() -> Reponse not OK (200)")
