@@ -1,8 +1,13 @@
-DRY_RUN = True
-
+CLIENT_URL = "http://cloud.swiftbird.de:8077/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST"
 VT_UPPRIO_THRESHOLD = 1  # Needed VT hit-Counts for increased priority
 VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-priorization
-API_KEY = '00d3653d3a9f3c297b1f81b238f92f7a259656f31ad854fd1cee87885134f904'
+
+# You need to export the following env. vars like this:
+# export OTRS_USER_PW="myotrsuserpw"
+# export VT_API_KEY='myvtkey'
+
+# For script to actually update tickets in OTRS also set:
+# export OTRS_ORCH_PROD='True'
 
 FP_Domains = (
     "api.telegram.org"
@@ -26,6 +31,8 @@ DoneTickets = [1]
 DoneIPArticles = [1]
 DoneDNSArticles = [1]
 
+
+# Start of Script #
 from ssl import ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE, ALERT_DESCRIPTION_UNKNOWN_PSK_IDENTITY
 from typing import KeysView
 from pyotrs import Client
@@ -45,6 +52,14 @@ import traceback
 import os
 import validators
 import base64
+from distutils import util
+
+VT_API_KEY = os.environ['VT_API_KEY']
+OTRS_USER_PW = os.environ['OTRS_USER_PW']
+try:
+    DRY_RUN = not bool(util.strtobool(os.environ['OTRS_ORCH_PROD']))
+except:
+    DRY_RUN = True
 
 
 def every(delay, task):
@@ -139,7 +154,7 @@ def HandleFalsePositives(client, ticket, type, input):
 def checkVT(type, input):
     score = ("",0,0)
     msg = ""
-    header = {'x-apikey' : API_KEY}
+    header = {'x-apikey' : VT_API_KEY}
     
     if type == "IP":
         print("Scanning IP '"+input+"'...")
@@ -164,24 +179,36 @@ def checkVT(type, input):
             print("[WARNING] URL to be scanned by VT seems to be invalid: "+input)
             return msg, score, True
 
-        url_id = base64.urlsafe_b64encode("http://www.somedomain.com/this/is/my/url".encode()).decode().strip("=")
+        url_id = (input.encode()).decode().strip("=")
 
         vt_url = "https://www.virustotal.com/api/v3/urls"
 
+        print("URL ID: " +input)
+
         payload = "url="+url_id
+
         headers = {
             "Accept": "application/json",
-            "x-apikey": API_KEY,
+            "x-apikey": VT_API_KEY,
             "Content-Type": "application/x-www-form-urlencoded"
         }
 
-        response_url_req = requests.request("POST", vt_url, data=payload, headers=headers)
-        response_url_req_json = response_url_req.json()
-        id_url_analysis = response_url_req_json["data"]["id"]
-        print("Got URL Scan response. ID: "+id_url_analysis)
+        try:
+            response_url_req = requests.request("POST", vt_url, data=payload, headers=headers)
+            response_url_req_json = response_url_req.json()
 
-        url = 'https://www.virustotal.com/api/v3/analyses/'+id_url_analysis
-        response = requests.get(url, headers=header, verify=True)       
+            id_url_analysis = response_url_req_json["data"]["id"]
+            print("Got URL Scan response. ID: "+id_url_analysis)
+
+            url = 'https://www.virustotal.com/api/v3/analyses/'+id_url_analysis
+            response = requests.get(url, headers=header, verify=True)
+
+
+        except Exception as e:
+            print("[WARNING] Non-Fatal Error in VT Scan URL result fetching.")
+            print((traceback.format_exc()))
+            return msg, score, True
+
 
 
     elif type == "Domain":
@@ -203,7 +230,10 @@ def checkVT(type, input):
     
     try:
         # Check for hits in result
-        result = (res['data']['attributes']['last_analysis_stats'])
+        if type != "URL":
+            result = (res['data']['attributes']['last_analysis_stats'])
+        else:
+            result = (res['data']['attributes']['stats'])       
     except Exception as e:
         print("[WARNING] Non-Fatal Error in VT Scan result fetching.")
         print((traceback.format_exc()))
@@ -410,7 +440,7 @@ def AddNote_VT_Scan_Domain(client, ticket):
                 domain = domain[1]
                 path = path[1]
                 print("Found URL: "+domain+path)
-                msg_src, score_src, err_vt = checkVT("URL", domain+path)
+                msg_src, score_src, err_vt = checkVT("URL", "https://"+domain+path)
             elif domain != None and domain[1] != "<MISSING":
                 domain = domain[1]
                 print("Found Domain: "+domain)
@@ -555,7 +585,7 @@ def UpdatePrio(client, ticket, hits, engines):
 def every_minute():
     try:
         print("Executing scheudeled task (1 min):\n\n")
-        client = Client("http://cloud.swiftbird.de/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST","SIEMUser","9f5d8ccf63f8a3e9fb874d32ac5d6a4ca9cc88574b2fbfd3f4bca9a8bbf636cd")
+        client = Client(CLIENT_URL,"SIEMUser",OTRS_USER_PW)
         client.session_create()
         last_day = datetime.utcnow() - timedelta(days=10)
         new_tickets = client.ticket_search(TicketCreateTimeNewerDate=last_day, StateType=['new'])
@@ -626,7 +656,7 @@ def main():
 
     try:
         every_minute()
-        every(10, every_minute)
+        every(60, every_minute)
     except KeyboardInterrupt:
         print('\n\nStopped Program!\n')
         try:
