@@ -1,7 +1,4 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "3.9.7",
     "configurations": [
         {
@@ -9,7 +6,12 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "env": {
+                "VT_API_KEY": "00d3653d3a9f3c297b1f81b238f92f7a259656f31ad854fd1cee87885134f904",
+                "OTRS_USER_PW": "9f5d8ccf63f8a3e9fb874d32ac5d6a4ca9cc88574b2fbfd3f4bca9a8bbf636cd",
+                "OTRS_ORCH_PROD": "False"
+              }
         }
     ]
 }
