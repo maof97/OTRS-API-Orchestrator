@@ -566,6 +566,7 @@ def UpdatePrio(client, ticket, hits, engines):
             result = "(dry run)"
             if not DRY_RUN:
                 result = client.ticket_update(ticket_id, Note)
+                Alert_Ticket(client, ticket, 1)
             return
 
         if engines >= VT_DEPRIO_THRESHOLD and hits == 0:
@@ -593,7 +594,7 @@ def UpdatePrio(client, ticket, hits, engines):
 
 
 
-def Alert_Ticket(client, ticket):
+def Alert_Ticket(client, ticket, prio_change):
     try:
         Title = ticket.field_get("Title")
         ticket_id = ticket.field_get("TicketID")
@@ -603,7 +604,11 @@ def Alert_Ticket(client, ticket):
         #AT_PERSON = "@Martin "
 
         if(Priority <= TELEGRAM_ALERT_PRIO):
-            msg = " %2A%2ANew Ticket: _"+Title+"_%2A%2A%0A%0ACurrent Prio: "+str(Priority)+ "%0A%0ALink: "+CLIENT_DOMAIN+"/otrs/index.pl?Action=AgentTicketZoom;TicketID="+str(ticket_id)
+            if prio_change == 0:
+                msg = " %2A%2ANew Ticket: _"+Title+"_%2A%2A%0A%0ACurrent Prio: "+str(Priority)+ "%0A%0ALink: "+CLIENT_DOMAIN+"/otrs/index.pl?Action=AgentTicketZoom;TicketID="+str(ticket_id)
+            else:
+                msg = " %2A%2AWARNING INCREASED TICKET PRIORITY%0A _"+Title+"_%2A%2A%0A%0A"
+
             res = requests.post("https://api.telegram.org"+req_path+msg)
             if(res != "<Response [200]>"):
                 print("[WARNING] Could not send Telegram Alert in Alert_Ticket() -> Reponse not OK (200)")
@@ -671,7 +676,9 @@ def every_minute():
             #result, hits_vt, engines_vt = 
             AddNote_VT_Scan_IP(client, ticket)
             AddNote_VT_Scan_Domain(client, ticket)
-            Alert_Ticket(client, ticket)
+
+            ticket = client.ticket_get_by_id(ticket_id,articles=True)
+            Alert_Ticket(client, ticket, 0)
             #if result != 0: (Now in AddNote function aboe (per-Article))
             #    updated_state = UpdatePrio(client, ticket, hits_vt, engines_vt)
                          
