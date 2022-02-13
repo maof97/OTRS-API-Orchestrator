@@ -61,6 +61,8 @@ import validators
 import base64
 from distutils import util
 
+from alertelast import query_open_rules
+
 VT_API_KEY = os.environ['VT_API_KEY']
 OTRS_USER_PW = os.environ['OTRS_USER_PW']
 TELEGRAM_BOT_KEY = os.environ['TELEGRAM_BOT_KEY']
@@ -446,7 +448,7 @@ def AddNote_VT_Scan_Domain(client, ticket):
 
 
             if foundURL:
-                if path.startswith("/"):
+                if path[0].startswith("/"):
                     url_ = domain[1] + path[1]
                 else:
                     url_ = path[1]
@@ -609,10 +611,11 @@ def Alert_Ticket(client, ticket, prio_change):
             else:
                 msg = " %2A%2AWARNING INCREASED TICKET PRIORITY%0A _"+Title+"_%2A%2A%0A%0A"
 
-            res = requests.post("https://api.telegram.org"+req_path+msg)
-            if(res != "<Response [200]>"):
-                print("[WARNING] Could not send Telegram Alert in Alert_Ticket() -> Reponse not OK (200)")
-                print(res.json())
+            if not DRY_RUN:
+                res = requests.post("https://api.telegram.org"+req_path+msg)
+                if(res != "<Response [200]>"):
+                    print("[WARNING] Could not send Telegram Alert in Alert_Ticket() -> Reponse not OK (200)")
+                    print(res.json())
             return
     except Exception as e:
         print("[WARNING] Non-Fatal Error in Alert_Ticket()")
@@ -625,8 +628,13 @@ def Alert_Ticket(client, ticket, prio_change):
 
 
 def every_minute():
+    print("Executing scheudeled task (1 min):\n\n")
     try:
-        print("Executing scheudeled task (1 min):\n\n")
+        query_open_rules()
+    except:
+        print("Fatal Error in Query_Open_Rules!")
+        pass
+    try:
         client = Client(CLIENT_URL,"SIEMUser",OTRS_USER_PW)
         client.session_create()
         last_day = datetime.utcnow() - timedelta(days=1)

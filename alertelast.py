@@ -150,7 +150,7 @@ def handle_alert(doc):
   except:
     pass
 
-  if ((src or dst) == ''):
+  if (((src or dst) == '') or ((src or dst) == None)):
     title = title + " | Host: "+src+dst
   else:
     title = title + " ["+src+" > "+dst+")"
@@ -172,6 +172,7 @@ def handle_alert(doc):
 
 
 def query_open_rules():
+  print("Quering rules of ELastic SIEM...")
   # Take the user's parameters and put them into a Python
   # dictionary structured like an Elasticsearch query:
   query_body = {
@@ -202,6 +203,7 @@ def query_open_rules():
 
       # print a few spaces between each doc for readability
       print ("\n\n")
+  print("Done Quering Elastic SIEM")
       
 
 
