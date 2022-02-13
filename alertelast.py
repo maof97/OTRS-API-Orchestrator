@@ -64,11 +64,16 @@ elastic_client = Elasticsearch(hosts=[ELASTIC_HOST], http_auth=(ELASTIC_USER, EL
 client = Client(CLIENT_URL,"SIEMUser",OTRS_USER_PW)
 client.session_create()
 
+
 def deep_get(dictionary, keys, default=None):
     return reduce(lambda d, key: d.get(key, default) if isinstance(d, dict) else default, keys.split("."), dictionary)
 
+
 def mark_acknowledged(id):
-  elastic_client.update(index='.internal.alerts-security.alerts-default-000001',id=id, body={"doc": {"kibana.alert.workflow_status": "acknowledged"}})
+  try:
+    elastic_client.update(index='.internal.alerts-security.alerts-default-000001',id=id, body={"doc": {"kibana.alert.workflow_status": "acknowledged"}})
+  except:
+    print("Non-fatal Error, trying to update SIEM alert to acknowledged.")
 
 
 def send_to_otrs(title, prio, queue, body):
