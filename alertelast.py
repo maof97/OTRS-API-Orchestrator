@@ -26,6 +26,7 @@ host_map = {
 
 # Start of Script #
 from hashlib import new
+from queue import Queue
 from ssl import ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE, ALERT_DESCRIPTION_UNKNOWN_PSK_IDENTITY
 from termios import TIOCPKT_FLUSHWRITE
 from typing import Dict, KeysView
@@ -119,7 +120,7 @@ def send_to_otrs(title, prio, queue, body):
   if not same_ticket_found:
     new_ticket = Ticket.create_basic(Title=title, Queue=queue, Type="Alert", State=u"new", Priority=otrs_prio, CustomerUser="SIEM_API")
     if not DRY_RUN:
-      result = client.ticket_create(new_ticket, article)
+      result = client.ticket_create(new_ticket, article, Queue=queue)
       print("Created new ticket.")
       DoneTitles[title] = result['TicketID']
     else:
@@ -128,7 +129,7 @@ def send_to_otrs(title, prio, queue, body):
   else:
     if not DRY_RUN:
       print(client.ticket_update(same_ticket_id, article=article))
-      client.ticket_update(same_ticket_id, StateType="new", State="new")
+      client.ticket_update(same_ticket_id, StateType="new", State="new", Queue=queue)
       print("Updated ticket.")
     else:
       print("Would update ticket now but this is a dry run...")
