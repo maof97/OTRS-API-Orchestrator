@@ -109,13 +109,20 @@ def send_to_otrs(title, prio, queue, body):
   article = Article({"Subject" : title, "Body" : body})
   if not same_ticket_found:
     new_ticket = Ticket.create_basic(Title=title, Queue=queue, Type="Alert", State=u"new", Priority=otrs_prio, CustomerUser="SIEM_API")
-    result = client.ticket_create(new_ticket, article)
-    print("Created new ticket.")
-    DoneTitles[title] = result['TicketID']
+    if not DRY_RUN:
+      result = client.ticket_create(new_ticket, article)
+      print("Created new ticket.")
+      DoneTitles[title] = result['TicketID']
+    else:
+      print("Would create ticket now but this is a dry run...")
+
   else:
     print(client.ticket_update(same_ticket_id, article=article))
-    client.ticket_update(same_ticket_id, StateType="new", State="new")
-    print("Updated ticket.")
+    if not DRY_RUN:
+      client.ticket_update(same_ticket_id, StateType="new", State="new")
+      print("Updated ticket.")
+    else:
+      print("Would update ticket now but this is a dry run...")
 
 
 def handle_alert(doc):
