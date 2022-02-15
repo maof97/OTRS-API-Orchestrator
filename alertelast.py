@@ -75,7 +75,8 @@ def mark_acknowledged(id):
 
     for index in idx.text.splitlines():
       print("Found Kibana Security Index: "+index)
-      res = requests.post(ELASTIC_HOST+"/"+index+"/_update/"+id)
+      dta  = {"doc": {"kibana.alert.workflow_status": "acknowledged"}}
+      res = requests.post(ELASTIC_HOST+"/"+index+"/_update/"+id,data=dta)
       print("Acknowledged alert.\n")
 
   except:
@@ -117,8 +118,8 @@ def send_to_otrs(title, prio, queue, body):
       print("Would create ticket now but this is a dry run...")
 
   else:
-    print(client.ticket_update(same_ticket_id, article=article))
     if not DRY_RUN:
+      print(client.ticket_update(same_ticket_id, article=article))
       client.ticket_update(same_ticket_id, StateType="new", State="new")
       print("Updated ticket.")
     else:
