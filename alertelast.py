@@ -74,10 +74,18 @@ def mark_acknowledged(id):
     idx = requests.get(ELASTIC_HOST+"/_cat/indices/.internal.alerts-security.alerts-default-*?h=idx", auth=(ELASTIC_USER, ELASTIC_PW))
 
     for index in idx.text.splitlines():
+      headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+      }
       print("Found Kibana Security Index: "+index)
-      dta  = {"doc": {"kibana.alert.workflow_status": "acknowledged"}}
-      res = requests.post(ELASTIC_HOST+"/"+index+"/_update/"+id,data=dta)
-      print("Acknowledged alert.\n")
+      dta  = '{"doc": {"kibana.alert.workflow_status": "acknowledged"}}'
+      res = requests.post(ELASTIC_HOST+"/"+index+"/_update/"+id,data=dta, headers=headers, auth=(ELASTIC_USER, ELASTIC_PW))
+      res = res.json()
+      if res['_shards']['successful'] >= 1:
+        print("Successfully acknowledged alert.\n")
+      if res['_shards']['failed'] >= 1:
+        print("Failed acknowledging alert: "+res+"\n") 
 
   except:
     print("Non-fatal Error, trying to update SIEM alert to acknowledged.")
