@@ -71,7 +71,13 @@ def deep_get(dictionary, keys, default=None):
 
 def mark_acknowledged(id):
   try:
-    elastic_client.update(index='.internal.alerts-security.alerts-default-000001',id=id, body={"doc": {"kibana.alert.workflow_status": "acknowledged"}})
+    idx = requests.get(ELASTIC_HOST+"/_cat/indices/.internal.alerts-security.alerts-default-*?h=idx", auth=(ELASTIC_USER, ELASTIC_PW))
+
+    for index in idx.text.splitlines():
+      print("Found Kibana Security Index: "+index)
+      res = requests.post(ELASTIC_HOST+"/"+index+"/_update/"+id)
+      print("Acknowledged alert.\n")
+
   except:
     print("Non-fatal Error, trying to update SIEM alert to acknowledged.")
 
@@ -204,8 +210,6 @@ def query_open_rules():
       print ("DOC ID:", doc["_id"])
 
       handle_alert(doc)
-      #print(doc.get('_source.source.ip', 'mssing'))
-
       # print a few spaces between each doc for readability
       print ("\n\n")
   print("Done Quering Elastic SIEM")

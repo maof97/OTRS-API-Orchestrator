@@ -628,12 +628,15 @@ def Alert_Ticket(client, ticket, prio_change):
 
 
 def every_minute():
+
     print("Executing scheudeled task (1 min):\n\n")
     try:
+        print("Executing alertelast.py...:\n")
         query_open_rules()
     except:
-        print("Fatal Error in Query_Open_Rules!")
+        print("Fatal Error in alertelast().Query_Open_Rules!")
         pass
+
     try:
         client = Client(CLIENT_URL,"SIEMUser",OTRS_USER_PW)
         client.session_create()
