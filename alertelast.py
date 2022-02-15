@@ -20,6 +20,7 @@ host_map = {
   "192.168.178.95" : "WindowsServer.local",
   "10.26.0.10" : "MacBookPro von Martin",
   "10.26.0.3" : "iPhone von Martin",
+  "10.26.0.4" : "iPad von Martin",
   "10.26.0.5" : "DESKTOP-FAAPB3V",
   "10.26.0.99" : "Cloud OTRS (WG)"
 }
