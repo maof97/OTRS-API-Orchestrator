@@ -164,8 +164,8 @@ def handle_alert(doc):
   
   # Parse Title
   src = deep_get(doc, 'source.ip', default='')
-  src = deep_get(doc, 'host.hostname', default=src)
   src = deep_get(host_map, src, default=src)
+  src = deep_get(doc, 'host.hostname', default=src)
   try:
     a = host_map[src]
     if a != None:
