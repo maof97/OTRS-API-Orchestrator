@@ -633,9 +633,9 @@ def every_minute():
     try:
         print("Executing alertelast.py...:\n")
         query_open_rules()
-    except:
-        print("Fatal Error in alertelast().Query_Open_Rules!")
-        pass
+    except Exception as e:
+        print("[ERROR] ALERTELAST FAILED:\n")
+        print((traceback.format_exc()))
 
     try:
         client = Client(CLIENT_URL,"SIEMUser",OTRS_USER_PW)
