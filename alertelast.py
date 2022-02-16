@@ -64,7 +64,7 @@ except:
 
 elastic_client = Elasticsearch(hosts=[ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_PW))
 client = Client(CLIENT_URL,"SIEMUser",OTRS_USER_PW)
-client.session_create()
+
 
 
 def deep_get(dictionary, keys, default=None):
@@ -94,6 +94,7 @@ def mark_acknowledged(id):
 
 
 def send_to_otrs(title, prio, queue, body):
+  client.session_create()
   same_ticket_found = False
 
   last_day = datetime.utcnow() - timedelta(days=1)
