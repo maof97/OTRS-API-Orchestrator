@@ -170,7 +170,8 @@ def handle_alert(doc):
   except:
     if src == None:
       src = "<Parsing Error>"
-  
+    if isinstance(src, list):
+      src = ''.join(src)
   try:
     a = host_map[src]
     if a != None:
