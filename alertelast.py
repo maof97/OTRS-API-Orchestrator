@@ -186,10 +186,10 @@ def handle_alert(doc):
   except:
     pass
 
-  if (((src or dst) == '') or ((src or dst) == None)):
+  if (((src or dst) == '') or ((src or dst) == None) or not re.search('[0-9a-zA-Z]', dst)):
     title = title + " | Host: "+src+dst
   else:
-    title = title + " ["+src+" > "+dst+")"
+    title = title + " ["+src+" > "+dst+"]"
 
 
   if not is_suricata:
