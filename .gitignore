@@ -6,3 +6,4 @@ api_telegram.txt
 .vscode/launch.json
 *.json
 .DS_Store
+*.html
