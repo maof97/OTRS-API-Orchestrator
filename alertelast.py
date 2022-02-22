@@ -115,7 +115,7 @@ def send_to_otrs(title, prio, queue, body):
     same_ticket_found = True
 
   # Map Elastic Prio to OTRS Prio
-  prio_map = {"low": u"4 low", "medium" : u"3 normal", "high" : u"2 high", "critical" : u"1 very-high"}
+  prio_map = {"low": "4 low", "medium" : "3 normal", "high" : "2 high", "critical" : "1 very-high"}
   otrs_prio = prio_map[prio]
 
   article = Article({"Subject" : title, "Body" : body})

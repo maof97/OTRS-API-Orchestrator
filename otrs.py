@@ -25,6 +25,7 @@ FP_IPs = (
 
 FP_Org_Names = (
     "APPLE"
+    "Telegram Messenger Inc"
 )
 
 Def_P4_Tickets = (
@@ -718,7 +719,7 @@ def every_minute():
 
             print("Correcting default priority if needed...")
             CorrectDefaultPrio(client, ticket)
-            print("\nHandling Organisation Name False positives...")
+            print("\nHandling Organization Name False positives...")
             HandleFalsePositives(client, ticket, "Org", ticketDict)
 
             print("\nScanning Ticket IP Addresses in VirusTotal...")
