@@ -37,7 +37,8 @@ Def_P4_Tickets = (
 "Test Rule", 
 "ET DNS Query for .to TLD", 
 "ET DNS Query for .cloud TLD",
-"alerts on Ipad"
+"alerts on Ipad",
+"ET INFO"
 )
 DoneTickets = [1]
 DoneIPArticles = [1]
@@ -581,11 +582,13 @@ def SetTicketPrio(client, ticket, prio):
 def CorrectDefaultPrio(client, ticket):
     Title = ticket.field_get("Title")
     ticket_id = ticket.field_get("TicketID")
-    for Def_P4_Ticket in Def_P4_Tickets:
-        if Def_P4_Ticket in Title:
-            print("Changing ticket priority to default (low) value for: "+Title)
-            SetTicketPrio(client, ticket, 4)
-            return
+    
+    if ticket.field_get("State") == "new":  
+        for Def_P4_Ticket in Def_P4_Tickets:
+            if Def_P4_Ticket in Title:
+                print("Changing ticket priority to default (low) value for: "+Title)
+                SetTicketPrio(client, ticket, 4)
+                return
 
 
 
