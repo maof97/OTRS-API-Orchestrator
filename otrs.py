@@ -23,9 +23,13 @@ FP_IPs = (
     "1.1.1.1"
 )
 
+FP_Org_Names = (
+    "APPLE"
+)
 
 Def_P4_Tickets = (
-"SURICATA HTTP", 
+"SURICATA HTTP",
+"SURICATA TLS", 
 "INDICATOR-COMPROMISE png file attachment without matching file magic", 
 "INDICATOR-SHELLCODE", 
 "Test Rule", 
@@ -134,32 +138,60 @@ def hit_counter(input):
 def HandleFalsePositives(client, ticket, type, input):
     
     # Handle FP Domains
-    if(type == "Domain" or "IP"):
+    if(type == ("Domain" or "IP")):
+        try:
+            if (input in FP_Domains) or (input in FP_IPs):
+                Title = ticket.field_get("Title")
+                ticket_id = ticket.field_get("TicketID")
+                current_prio = int(ticket.field_get("Priority")[0])
 
-        if input in FP_Domains or input in FP_IPs:
-            Title = ticket.field_get("Title")
-            ticket_id = ticket.field_get("TicketID")
-            current_prio = int(ticket.field_get("Priority")[0])
+                print("Strongly decreasing ticket priority (down 2) because of known false-positive domain/ip: "+input)
 
-            print("Strongly decreasing ticket priority (down 2) because of known false-positive domain/ip: "+input)
+                new_prio = (current_prio +2)
+                if new_prio == 5:
+                    Note = Article({"Subject" : "Closed Ticket", "Body" : "Because of known false-positive domain/ip for the given connection and the ticket being priority 3 or 4, the ticket was closed automatically."})
+                    result = "(dry run)"
+                    if not DRY_RUN:
+                        result = client.ticket_update(ticket_id, Note) 
+                        result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")
+                    print("Closed ticket: "+Title)    
+                    return "closed!"      
+                else:
+                    SetTicketPrio(client, ticket, new_prio)
+                    Note = Article({"Subject" : "Decreased Priority to "+str(new_prio), "Body" : "Because of known false-positive domain/ip '"+input+"' for the given connection, the priority was drastically was decreased (minus 2)."})
+                    result = "(dry run)"
+                    if not DRY_RUN:
+                        result = client.ticket_update(ticket_id, Note)
+                return
+        except Exception as e:
+            print("[WARNING] Non-Fatal Error in HandleFalsePositives(DomainIP)")
+            print((traceback.format_exc()))
+            pass   
 
-            new_prio = (current_prio +2)
-            if new_prio == 5:
-                Note = Article({"Subject" : "Closed Ticket", "Body" : "Because of known false-positive domain/ip for the given connection and the ticket being priority 3 or 4, the ticket was closed automatically."})
+
+    if(type == "Org"):
+        try:
+            Org_Name = re.search('[\n\r].*Destination Organisation Name:\s([^\n:]*)', input['Ticket']['Article'][0]['Body'],re.IGNORECASE)[1]
+            print("Found Ticket's Organisation name: "+Org_Name)
+
+            if FP_Org_Names in Org_Name:
+                Title = ticket.field_get("Title")
+                ticket_id = ticket.field_get("TicketID")
+                current_prio = int(ticket.field_get("Priority")[0])
+
+                print("Closed ticket because of known false-positive ORG-NAME: "+Org_Name)            
+                Note = Article({"Subject" : "Closed Ticket", "Body" : "Because of known false-positive organisation name for the given connection the ticket was closed automatically."})
                 result = "(dry run)"
                 if not DRY_RUN:
                     result = client.ticket_update(ticket_id, Note) 
                     result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")
                 print("Closed ticket: "+Title)    
-                return "closed!"      
-            else:
-                SetTicketPrio(client, ticket, new_prio)
-                Note = Article({"Subject" : "Decreased Priority to "+str(new_prio), "Body" : "Because of known false-positive domain/ip '"+input+"' for the given connection, the priority was drastically was decreased (minus 2)."})
-                result = "(dry run)"
-                if not DRY_RUN:
-                    result = client.ticket_update(ticket_id, Note)
-            return
+                return "closed!"
 
+        except Exception as e:
+            print("[WARNING] Non-Fatal Error in HandleFalsePositives(Org)")
+            print((traceback.format_exc()))
+            pass       
 
 
 def checkVT(type, input):
@@ -251,7 +283,7 @@ def checkVT(type, input):
         return msg, score, True
 
     score = hit_counter(result)
-    msg = ("## VirusTotal Scan of Input "+input+" ##\n\n\nIP has a result of "+ score[0])
+    msg = ("## VirusTotal Scan of Input "+input+" ##\n\n\nInput has a result of "+ score[0])
     if score[1]>0:
         msg += "\n\n"
         engine_res = res['data']['attributes']['last_analysis_results']
@@ -400,7 +432,7 @@ def AddNote_VT_Scan_Domain(client, ticket):
 
         ticketDict = ticket.to_dct()
         Title = ticket.field_get("Title")
-        print("AddNote_VT_Scan_IP for: "+Title+"\n")
+        print("AddNote_VT_Scan_Domain for: "+Title+"\n")
         ticket_id = ticket.field_get("TicketID")
         ArticleArray = ticketDict['Ticket']['Article']
         score_src = [0, 0, 0]
@@ -421,26 +453,28 @@ def AddNote_VT_Scan_Domain(client, ticket):
             ArticleID = ArticleArray[i]['ArticleID']
 
             if ArticleID in DoneDNSArticles:
-                print("Article#"+str(ArticleID)+" already done or other API response. Skipping...")
+                print("Article#"+str(ArticleID)+" already done or other API response (DNS). Skipping...")
                 continue
             else:
                 print("Handling Article#"+str(ArticleID)+":\n")
 
             try:
-                path = re.search('"url":"([^"]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                path = re.search("'url':\s'([^']*)", ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
                 if path != None: # Url found - get hostname
-                    domain = re.search('{"hostname":"([^"]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                    domain = re.search("'hostname':\s'([^']*)", ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
                     foundURL = True
                 else:
                     domain = re.search('[\n\r].*Domain:\s([^\s:]*)', ticketDict['Ticket']['Article'][i]['Body'],re.IGNORECASE)
                     if domain == None or domain[1] == "<MISSING":
-                        domain = re.search('\{"sni":"([^"]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                        domain = re.search("'sni':\s'([^']*)", ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
                         if domain == None:
-                            domain = re.search('{"hostname":"([^"]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                            domain = re.search("'hostname':\s'([^']*)", ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
                             if domain == None:
-                                payload = re.search('.*?"payload_printable"\s?:\s?"([^"]+)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
-                                if payload != None:
-                                    domain = re.search('([a-z0-9][a-z0-9-_]{2,61}[a-z0-9]{0,1})\.([a-z0-9\-]{1,61}|[a-z0-9-]{1,30})\.([a-z]{2,})', payload[1], re.IGNORECASE)                        
+                                domain = re.search('Host: ([^\n]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                                if domain == None:
+                                    payload = re.search('[\n\r].*PAYLOAD:\n([^\n]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                                    if payload != None:
+                                        domain = re.search('\.\.\.([a-z0-9\-].*)\.\.A', payload[1], re.IGNORECASE) 
 
             except Exception as e:
                 print("[WARNING] Non-Fatal Error in AddNote_VT_Scan_Domain > Regex Domain/ Return MSG for ArticleID: "+str(ArticleID))
@@ -448,14 +482,14 @@ def AddNote_VT_Scan_Domain(client, ticket):
 
 
             if foundURL:
-                if path[0].startswith("/"):
+                if path[1].startswith("/"):
                     url_ = domain[1] + path[1]
                 else:
                     url_ = path[1]
                 print("Found URL: "+url_)
                 msg_src, score_src, err_vt = checkVT("URL", "https://"+url_)
 
-            elif domain != None and domain[1] != "<MISSING":
+            if domain != None and domain[1] != "<MISSING":
                 domain = domain[1]
                 print("Found Domain: "+domain)
                 msg_src, score_src, err_vt = checkVT("Domain", domain)
@@ -473,7 +507,7 @@ def AddNote_VT_Scan_Domain(client, ticket):
 
                 if(not err_vt):
                     VT_Note = Article({"Subject" : "VirusTotal DNS Scan Result for '"+domain+"' ("+end_score+")", "Body" : msg_src})
-                    DoneDNSArticles.append(domain)
+                    DoneDNSArticles.append(ArticleID)
                     DoneDomains.append(domain)
 
                     pprint.pprint(VT_Note)
@@ -660,17 +694,17 @@ def every_minute():
 
                 for i in range(len(ArticleArray)):
                     # If an Article from API was after an Article -> mark the article as done and skip
-                    if "API" in ArticleArray[i]["From"] and " IP " in ArticleArray[i]["Subject"]:
+                    if "API" in ArticleArray[i]["From"] and (" IP " in ArticleArray[i]["Subject"]):
                         for j in range(len(ArticleArray)):
                             DoneIPArticles.append(ArticleArray[i - j]["ArticleID"])
                         pass
 
                 for i in range(len(ArticleArray)):
                     # If an Article from API was after an Article -> mark the article as done and skip
-                    if "API" in ArticleArray[i]["From"] and " DNS " in ArticleArray[i]["Subject"]:
+                    if "API" in ArticleArray[i]["From"] and ("VirusTotal DNS Scan Result for" in ArticleArray[i]["Subject"]):
                         for j in range(len(ArticleArray)):
                             DoneDNSArticles.append(ArticleArray[i - j]["ArticleID"])
-                        pass  
+                            pass  
 
 
                 if skipTicket:
@@ -680,19 +714,26 @@ def every_minute():
                 print("[WARNING] There was an Error in Skipping already done tickets (every_minute).\n")
 
             #Found new ticket:    
-            print("---- Handling new ticket:----\n#"+ticket_id+" "+Title)  
+            print("\n\n---- Handling new ticket:----\n#"+ticket_id+" "+Title+"\n\n")  
 
+            print("Correcting default priority if needed...")
             CorrectDefaultPrio(client, ticket)
+            print("\nHandling Organisation Name False positives...")
+            HandleFalsePositives(client, ticket, "Org", ticketDict)
 
-            #result, hits_vt, engines_vt = 
+            print("\nScanning Ticket IP Addresses in VirusTotal...")
             AddNote_VT_Scan_IP(client, ticket)
+            
+            print("\nScanning Ticket Domain Names in VirusTotal...")
             AddNote_VT_Scan_Domain(client, ticket)
 
             ticket = client.ticket_get_by_id(ticket_id,articles=True)
-            Alert_Ticket(client, ticket, 0)
-            #if result != 0: (Now in AddNote function aboe (per-Article))
-            #    updated_state = UpdatePrio(client, ticket, hits_vt, engines_vt)
-                         
+            if ticket.field_get("State") == "new":
+                Alert_Ticket(client, ticket, 0)
+            else:
+                print("\nSkipped alerting of already closed ticket.")
+    
+
             DoneTickets.append(TicketNumber)
 
         print("\n# Done Tickets this round: #\n\n")
