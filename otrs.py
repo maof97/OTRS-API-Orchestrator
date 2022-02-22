@@ -17,6 +17,7 @@ TELEGRAM_ALERT_PRIO = 4  # On which (exact or lower) priority level to send a Te
 
 FP_Domains = (
     "api.telegram.org"
+    "traffic.va3.megaphone.cloud"
 )
 
 FP_IPs = (
@@ -546,6 +547,8 @@ def AddNote_VT_Scan_Domain(client, ticket):
         ## Ticket done ##
 
         #Update state?
+        ticket_id = ticket.field_get("TicketID")
+        ticket = client.ticket_get_by_id(ticket_id,articles=True) #Update to newest data of the ticket
         updated_state = UpdatePrio(client, ticket, final_score[0], final_score[1])
 
         if updated_state != "closed!":
@@ -565,8 +568,9 @@ def SetTicketPrio(client, ticket, prio):
     PrioStrings.append("4 low")
     prio = PrioStrings[prio]
 
-    current_prio = ticket.field_get("Priority")
     ticket_id = ticket.field_get("TicketID")
+
+    current_prio = ticket.field_get("Priority")
     Title = ticket.field_get("Title")
     if not DRY_RUN:
         result = client.ticket_update(ticket_id, Priority=prio)
@@ -719,6 +723,7 @@ def every_minute():
 
             print("Correcting default priority if needed...")
             CorrectDefaultPrio(client, ticket)
+
             print("\nHandling Organization Name False positives...")
             HandleFalsePositives(client, ticket, "Org", ticketDict)
 
