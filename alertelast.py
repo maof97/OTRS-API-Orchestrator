@@ -115,8 +115,12 @@ def send_to_otrs(title, prio, queue, body):
     same_ticket_found = True
 
   # Map Elastic Prio to OTRS Prio
-  prio_map = {"low": "4 low", "medium" : "3 normal", "high" : "2 high", "critical" : "1 very-high"}
-  otrs_prio = prio_map[prio]
+  try:
+    prio_map = {"low": "4 low", "medium" : "3 normal", "high" : "2 high", "critical" : "1 very-high"}
+    otrs_prio = prio_map[prio]
+  except Exception as e:
+    print("[WARNING] Non-Fatal Error in send_to_otrs()-Determine Prio. 'prio': "+prio)
+    print((traceback.format_exc()))
 
   article = Article({"Subject" : title, "Body" : body})
   if not same_ticket_found:
@@ -158,7 +162,7 @@ def handle_alert(doc):
 
   # Parse params
   title = doc['kibana.alert.rule.name']
-  prio = deep_get(doc, 'kibana.alert.severity')
+  prio = doc['kibana.alert.severity']
 
   try: # Fix Suricata Severity
     prio_suricata = deep_get(doc, 'suricata.eve.alert.metadata.signature_severity')
