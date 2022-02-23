@@ -27,6 +27,7 @@ FP_IPs = (
 FP_Org_Names = (
     "APPLE"
     "Telegram Messenger Inc"
+    "MICROSOFT"
 )
 
 Def_P4_Tickets = (
@@ -174,7 +175,7 @@ def HandleFalsePositives(client, ticket, type, input):
 
     if(type == "Org"):
         try:
-            Org_Name = re.search('[\n\r].*Destination Organisation Name:\s([^\n:]*)', input['Ticket']['Article'][0]['Body'],re.IGNORECASE)[1]
+            Org_Name = re.search('[\n\r].*Destination Organization Name:\s([^\n:]*)', input['Ticket']['Article'][0]['Body'],re.IGNORECASE)[1]
             print("Found Ticket's Organisation name: "+Org_Name)
 
             if FP_Org_Names in Org_Name:
@@ -582,7 +583,7 @@ def SetTicketPrio(client, ticket, prio):
 def CorrectDefaultPrio(client, ticket):
     Title = ticket.field_get("Title")
     ticket_id = ticket.field_get("TicketID")
-    
+
     if ticket.field_get("State") == "new":  
         for Def_P4_Ticket in Def_P4_Tickets:
             if Def_P4_Ticket in Title:
