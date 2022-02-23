@@ -124,7 +124,17 @@ def send_to_otrs(title, prio, queue, body):
     if not DRY_RUN:
       result = client.ticket_create(new_ticket, article, Queue=queue)
       print("Created new ticket.")
-      DoneTitles[title] = result['TicketID']
+      ticket_id = result['TicketID']
+      DoneTitles[title] = ticket_id
+
+      #Fix prio
+      ticket = client.ticket_get_by_id(ticket_id,articles=True)
+      current_prio = ticket.field_get("Priority")
+      Title = ticket.field_get("Title")
+      if not DRY_RUN:
+          result = client.ticket_update(ticket_id, Priority=otrs_prio)
+      print("Updated ticket priority from [" +(current_prio)+ "] to -> [" +prio+ "] for: "+Title)
+
     else:
       print("Would create ticket now but this is a dry run...")
 
@@ -148,13 +158,14 @@ def handle_alert(doc):
 
   # Parse params
   title = doc['kibana.alert.rule.name']
-
+  prio = deep_get(doc, 'kibana.alert.severity')
+  
   try: # Fix Suricata Severity
     prio_suricata = deep_get(doc, 'suricata.eve.alert.metadata.signature_severity')
     if prio_suricata == "Major":
       prio = "critical"
   except:
-    prio = deep_get(doc, 'kibana.alert.severity')
+    pass
 
   #Check if Suricata Alert 
   src_port = deep_get(doc, 'suricata.eve.src_ip', default='')
