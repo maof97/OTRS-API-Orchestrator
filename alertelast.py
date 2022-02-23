@@ -8,6 +8,7 @@ OTRS_QUEUE = "Elastic SIEM (BOC) - T1"
 host_map = {
   "10.24.0.1" : "pPfsense",
   "10.24.0.2" : "pProxySSL",
+  "10.24.1.3" : "PVE-WINSRV-DC2",
   "10.24.1.4" : "pWindowsServer2019",
   "10.24.1.5" : "pElasticsearch",
   "10.24.1.6" : "pKibana",
