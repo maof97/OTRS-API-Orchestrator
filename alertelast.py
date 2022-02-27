@@ -110,10 +110,11 @@ def send_to_otrs(title, prio, queue, body):
     pass
 
   # Search if done locally:
-  same_ticket_id = DoneTitles.get(title, False)
-  if same_ticket_id:
-    print("Found ticket with same title done by alertelast itself.")
-    same_ticket_found = True
+  if not same_ticket_found:
+    same_ticket_id = DoneTitles.get(title, False)
+    if same_ticket_id:
+      print("Found ticket with same title done by alertelast itself.")
+      same_ticket_found = True
 
   # Map Elastic Prio to OTRS Prio
   try:
