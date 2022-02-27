@@ -731,14 +731,14 @@ def every_minute():
             print("Correcting default priority if needed...")
             CorrectDefaultPrio(client, ticket)
 
-            print("\nHandling Organization Name False positives...")
-            HandleFalsePositives(client, ticket, "Org", ticketDict)
-
             print("\nScanning Ticket IP Addresses in VirusTotal...")
             AddNote_VT_Scan_IP(client, ticket)
             
             print("\nScanning Ticket Domain Names in VirusTotal...")
             AddNote_VT_Scan_Domain(client, ticket)
+
+            print("\nHandling Organization Name False positives...")
+            HandleFalsePositives(client, ticket, "Org", ticketDict)
 
             ticket = client.ticket_get_by_id(ticket_id,articles=True)
             if ticket.field_get("State") == "new":
