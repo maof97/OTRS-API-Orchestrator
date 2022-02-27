@@ -25,12 +25,12 @@ FP_IPs = (
 )
 
 FP_Org_Names = (
-    "APPLE"
-    "Telegram Messenger Inc"
-    "MICROSOFT"
-    "APPLE-AUSTIN"
-    "APPLE-ENIGNEERING"
-    "BYTEDANCE"
+    "APPLE",
+    "Telegram Messenger Inc",
+    "MICROSOFT",
+    "APPLE-AUSTIN",
+    "APPLE-ENIGNEERING",
+    "BYTEDANCE "
 )
 
 Def_P4_Tickets = (
@@ -181,7 +181,7 @@ def HandleFalsePositives(client, ticket, type, input):
             Org_Name = re.search('[\n\r].*Destination Organization Name:\s([^\n:]*)', input['Ticket']['Article'][0]['Body'],re.IGNORECASE)[1]
             print("Found Ticket's Organisation name: "+Org_Name)
 
-            if FP_Org_Names in Org_Name:
+            if Org_Name in FP_Org_Names:
                 Title = ticket.field_get("Title")
                 ticket_id = ticket.field_get("TicketID")
                 current_prio = int(ticket.field_get("Priority")[0])
@@ -194,6 +194,8 @@ def HandleFalsePositives(client, ticket, type, input):
                     result = client.ticket_update(ticket_id, StateType="closed", State="auto-closed (API)")
                 print("Closed ticket: "+Title)    
                 return "closed!"
+            else:
+                print(Org_Name+" is not in the list of whitelisted Orgs.")
 
         except Exception as e:
             print("[WARNING] Non-Fatal Error in HandleFalsePositives(Org)")
@@ -496,7 +498,7 @@ def AddNote_VT_Scan_Domain(client, ticket):
                 print("Found URL: "+url_)
                 msg_src, score_src, err_vt = checkVT("URL", "https://"+url_)
 
-            if domain != None and domain[1] != "<MISSING":
+            if not domain[1] == 'None':
                 domain = domain[1]
                 print("Found Domain: "+domain)
                 msg_src, score_src, err_vt = checkVT("Domain", domain)
@@ -535,8 +537,6 @@ def AddNote_VT_Scan_Domain(client, ticket):
                 domain = None
                 path = None
                 foundURL = False
-
-                DoneIPArticles.append(ArticleID)
 
             except Exception as e:
                 print("[WARNING] Non-Fatal Error in AddNote_VT_Domain > Add Note / Note Update for ArticleID: "+str(ArticleID))
@@ -706,7 +706,7 @@ def every_minute():
 
                 for i in range(len(ArticleArray)):
                     # If an Article from API was after an Article -> mark the article as done and skip
-                    if "API" in ArticleArray[i]["From"] and (" IP " in ArticleArray[i]["Subject"]):
+                    if "API" in ArticleArray[i]["From"] and ("VirusTotal Scan Result for IP" in ArticleArray[i]["Subject"]):
                         for j in range(len(ArticleArray)):
                             DoneIPArticles.append(ArticleArray[i - j]["ArticleID"])
                         pass
