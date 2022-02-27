@@ -23,7 +23,10 @@ host_map = {
   "10.26.0.3" : "iPhone von Martin",
   "10.26.0.4" : "iPad von Martin",
   "10.26.0.5" : "DESKTOP-FAAPB3V",
-  "10.26.0.99" : "Cloud OTRS (WG)"
+  "10.26.0.99" : "Cloud OTRS (WG)",
+  "10.250.0.1" : "XLAB PfSense",
+  "10.251.0.2" : "XLAB Kali-Linux",
+  "10.252.0.1" : "XLAB UTMFW"
 }
 
 # Start of Script #

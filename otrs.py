@@ -28,6 +28,9 @@ FP_Org_Names = (
     "APPLE"
     "Telegram Messenger Inc"
     "MICROSOFT"
+    "APPLE-AUSTIN"
+    "APPLE-ENIGNEERING"
+    "BYTEDANCE"
 )
 
 Def_P4_Tickets = (
