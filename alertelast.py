@@ -26,7 +26,8 @@ host_map = {
   "10.26.0.99" : "Cloud OTRS (WG)",
   "10.250.0.1" : "XLAB PfSense",
   "10.251.0.2" : "XLAB Kali-Linux",
-  "10.252.0.1" : "XLAB UTMFW"
+  "10.252.0.1" : "XLAB UTMFW",
+  "10.24.0.30" : "pMinecraft"
 }
 
 # Start of Script #
