@@ -77,6 +77,8 @@ def deep_get(dictionary, keys, default=None):
 
 
 def mark_acknowledged(id):
+  suc = False
+
   try:
     idx = requests.get(ELASTIC_HOST+"/_cat/indices/.internal.alerts-security.alerts-default-*?h=idx", auth=(ELASTIC_USER, ELASTIC_PW))
 
@@ -87,15 +89,21 @@ def mark_acknowledged(id):
       }
       print("Found Kibana Security Index: "+index)
       dta  = '{"doc": {"kibana.alert.workflow_status": "acknowledged"}}'
-      res = requests.post(ELASTIC_HOST+"/"+index+"/_update/"+id,data=dta, headers=headers, auth=(ELASTIC_USER, ELASTIC_PW))
+      posturl = ELASTIC_HOST+"/"+index+"/_update/"+id
+      res = requests.post(posturl,data=dta, headers=headers, auth=(ELASTIC_USER, ELASTIC_PW))
       res = res.json()
-      if res['_shards']['successful'] >= 1:
+      if deep_get(res, '_shards.successful', False):
         print("Successfully acknowledged alert.\n")
-      if res['_shards']['failed'] >= 1:
-        print("Failed acknowledging alert: "+res+"\n") 
+        suc = True
+      else:
+        print("Couldn't acknowledge alert for index '"+index+"'\n")
+      
+    if not suc:
+      print("\n[WARNING] Failed acknowledging alert for document", id)
 
   except:
-    print("Non-fatal Error, trying to update SIEM alert to acknowledged.")
+    print("[WARNING] Non-fatal Error, trying to update SIEM alert to acknowledged.")
+    print((traceback.format_exc()))
 
 
 def send_to_otrs(title, prio, queue, body):
@@ -206,7 +214,7 @@ def handle_alert(doc):
       dst = a
   except:
     pass
-  
+
   if isinstance(dst, list): #or isinstance(dst, )
     dst = dst[0]
 
