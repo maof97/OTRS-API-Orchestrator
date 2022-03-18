@@ -179,7 +179,7 @@ def HandleFalsePositives(client, ticket, type, input):
 
     if(type == "Org"):
         try:
-            Org_Name = re.search('[\n\r].*Destination Organization Name:\s([^\n:]*)', input['Ticket']['Article'][0]['Body'],re.IGNORECASE)[1]
+            Org_Name = re.search('[\n\r].*Organization Name:\s([^\n:]*)', input['Ticket']['Article'][0]['Body'],re.IGNORECASE)[1]
             print("Found Ticket's Organisation name: "+Org_Name)
 
             if Org_Name in FP_Org_Names:
@@ -733,14 +733,14 @@ def every_minute():
             print("Correcting default priority if needed...")
             CorrectDefaultPrio(client, ticket)
 
+            print("\nHandling Organization Name False positives...")
+            HandleFalsePositives(client, ticket, "Org", ticketDict)
+            
             print("\nScanning Ticket IP Addresses in VirusTotal...")
             AddNote_VT_Scan_IP(client, ticket)
             
             print("\nScanning Ticket Domain Names in VirusTotal...")
             AddNote_VT_Scan_Domain(client, ticket)
-
-            print("\nHandling Organization Name False positives...")
-            HandleFalsePositives(client, ticket, "Org", ticketDict)
 
             ticket = client.ticket_get_by_id(ticket_id,articles=True)
             if ticket.field_get("State") == "new":
