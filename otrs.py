@@ -498,15 +498,16 @@ def AddNote_VT_Scan_Domain(client, ticket):
                     url_ = path[1]
                 print("Found URL: "+url_)
                 msg_src, score_src, err_vt = checkVT("URL", "https://"+url_)
-
-            if not domain[1] == 'None':
-                domain = domain[1]
-                print("Found Domain: "+domain)
-                msg_src, score_src, err_vt = checkVT("Domain", domain)
-            else:
+            try:
+                if not domain[1] == 'None':
+                    domain = domain[1]
+                    print("Found Domain: "+domain)
+                    msg_src, score_src, err_vt = checkVT("Domain", domain)
+                else:
+                    print("No Domain/URL in Article.")
+                    continue
+            except:
                 print("No Domain/URL in Article.")
-                continue
-
 
 
             # Craft the Note to send to ticket
