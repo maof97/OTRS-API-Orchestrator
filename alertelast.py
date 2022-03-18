@@ -206,6 +206,9 @@ def handle_alert(doc):
       dst = a
   except:
     pass
+  
+  if isinstance(dst, list): #or isinstance(dst, )
+    dst = dst[0]
 
   if (((src or dst) == '') or ((src or dst) == None) or not re.search('[0-9a-zA-Z]', dst)):
     title = title + " | Host: "+src+dst
