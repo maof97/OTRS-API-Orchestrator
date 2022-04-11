@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-ELASTIC_HOST = "http://10.24.1.5:9200"
-ELASTIC_USER = 'Martin'
-CLIENT_DOMAIN = "http://otrs.cloud.swiftbird.de:8077"
-CLIENT_URL = CLIENT_DOMAIN+"/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST"
-OTRS_QUEUE = "Elastic SIEM (BOC) - T1"
+ELASTIC_HOST = "https://10.20.1.6:9200"
+ELASTIC_USER = 'Kibana-API'
+CLIENT_DOMAIN = "https://otrs.cloud.swiftbird.de:8078"
+CLIENT_URL = CLIENT_DOMAIN+"/otrs/nph-genericinterface.pl/Webservice/ALERTELAST_API"
+OTRS_QUEUE = "SIEM - T1 (Bochum)"
 
 host_map = {
   "10.24.0.1" : "pPfsense",
@@ -52,10 +52,15 @@ import time
 import traceback
 from elasticsearch import Elasticsearch
 import os
+from rsa import verify
 import validators
 import base64
 from distutils import util
 from functools import reduce
+from ssl import create_default_context
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 DoneTitles = dict()
 
@@ -67,8 +72,10 @@ try:
 except:
     DRY_RUN = True
 
-elastic_client = Elasticsearch(hosts=[ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_PW))
-client = Client(CLIENT_URL,"SIEMUser",OTRS_USER_PW)
+context = create_default_context()
+context.check_hostname = False
+elastic_client = Elasticsearch(hosts=[ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_PW),ssl_context=context,verify_certs=False)
+client = Client(CLIENT_URL,"Kibana-SIEM",OTRS_USER_PW)
 
 
 
@@ -80,7 +87,7 @@ def mark_acknowledged(id):
   suc = False
 
   try:
-    idx = requests.get(ELASTIC_HOST+"/_cat/indices/.internal.alerts-security.alerts-default-*?h=idx", auth=(ELASTIC_USER, ELASTIC_PW))
+    idx = requests.get(ELASTIC_HOST+"/_cat/indices/.internal.alerts-security.alerts-default-*?h=idx", auth=(ELASTIC_USER, ELASTIC_PW),verify=False)
 
     for index in idx.text.splitlines():
       headers = {
@@ -90,7 +97,7 @@ def mark_acknowledged(id):
       print("Found Kibana Security Index: "+index)
       dta  = '{"doc": {"kibana.alert.workflow_status": "acknowledged"}}'
       posturl = ELASTIC_HOST+"/"+index+"/_update/"+id
-      res = requests.post(posturl,data=dta, headers=headers, auth=(ELASTIC_USER, ELASTIC_PW))
+      res = requests.post(posturl,data=dta, headers=headers, auth=(ELASTIC_USER, ELASTIC_PW), verify=False)
       res = res.json()
       if deep_get(res, '_shards.successful', False):
         print("Successfully acknowledged alert.\n")
@@ -138,7 +145,7 @@ def send_to_otrs(title, prio, queue, body):
 
   article = Article({"Subject" : title, "Body" : body})
   if not same_ticket_found:
-    new_ticket = Ticket.create_basic(Title=title, Queue=queue, Type="Alert", State=u"new", Priority=otrs_prio, CustomerUser="SIEM_API")
+    new_ticket = Ticket.create_basic(Title=title, Queue=queue, Type="Alert", State=u"new", Priority=otrs_prio, CustomerUser="Kibana_SIEM")
     if not DRY_RUN:
       result = client.ticket_create(new_ticket, article, Queue=queue)
       print("Created new ticket.")
@@ -240,7 +247,7 @@ def handle_alert(doc):
 
 
 def query_open_rules():
-  print("Quering rules of ELastic SIEM...")
+  print("\n\n## Quering rules of ELastic SIEM...\n")
   # Take the user's parameters and put them into a Python
   # dictionary structured like an Elasticsearch query:
   query_body = {
@@ -259,7 +266,7 @@ def query_open_rules():
   result = elastic_client.search(index=".internal.alerts-security.alerts-default-*", body=query_body, size=999)
 
   # see how many "hits" it returned using the len() function
-  print ("total hits:", len(result["hits"]["hits"]))
+  print ("\ntotal hits:", len(result["hits"]["hits"]))
   all_hits = result['hits']['hits']
 
   # iterate the nested dictionaries inside the ["hits"]["hits"] list
