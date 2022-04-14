@@ -17,7 +17,7 @@ class QRadar():
     def __init__(self, config):
         self.client = qradar_helper.TokenClient(
             config["host"],
-            config["token"],
+            os.environ['QRADAR_API_TOKEN'],
         )
 
     def get_offenses(self):
@@ -94,14 +94,14 @@ class OTRS():
             self.session.params["CustomerUserLogin"] = config["CustomerUserLogin"]
         else:
             self.session.params["UserLogin"] = config["UserLogin"]
-        self.session.params["Password"] = os.environ['OTRS_USER_PW_Qradar']
-        self.url = "https://{:s}/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST/Ticket".format(
-            config["host"],
+        self.session.params["Password"] = os.environ['OTRS_USER_PW_QRADAR']
+        self.url = "https://{:s}/otrs/nph-genericinterface.pl/Webservice/{:s}/Ticket".format(
+            config["host"], config["webservice"],
         )
         self.template = {
                 "Ticket": {
                         "Title": "",
-                        "QueueID": config["QueueID"],
+                        "Queue": config["Queue"],
                 "Type": "Unclassified",
                         "State": "new",
                         "PriorityID": config["PriorityID"],
@@ -118,11 +118,11 @@ class OTRS():
             "DynamicField": [
                 {
                     "Name": "ProcessManagementProcessID",
-                    "Value": "Process-b3bf5b5e4e75dd2b1382881f6fd80b47",
+                    "Value": "Process-faaa29848b2a9fccaea0e5c1d9bb3be1",
                 },
                 {
                     "Name": "ProcessManagementActivityID",
-                    "Value": "Activity-9ed4035e246d26b6646c7c1832834511",
+                    "Value": "Activity-bb863fa19f703dcc84ef3265e76e1051",
                                 },
             ],
         }
@@ -161,18 +161,18 @@ def default(obj):
 
 
 
-requests.packages.urllib3.disable_warnings()
+#requests.packages.urllib3.disable_warnings()
 
 # logging
 syslog.openlog(logoption=syslog.LOG_PID)
 
 # argparse
-parser = argparse.ArgumentParser()
-parser.add_argument("config", type=argparse.FileType('r'))
-args = parser.parse_args()
+#parser = argparse.ArgumentParser()
+#parser.add_argument("config", type=argparse.FileType('r'))
+#args = parser.parse_args()
 
 # settings
-config = json.load(args.config)
+config = json.load(open('config.json'))
 
 qradar = QRadar(config["QRadar"])
 
