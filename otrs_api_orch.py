@@ -1,8 +1,8 @@
-CLIENT_DOMAIN = "http://otrs.cloud.swiftbird.de:8077"
-CLIENT_URL = CLIENT_DOMAIN+"/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST"
+CLIENT_DOMAIN = "https://otrs.cloud.swiftbird.de:8078"
+CLIENT_URL = CLIENT_DOMAIN+"/otrs/nph-genericinterface.pl/Webservice/ALERTELAST_API"
 VT_UPPRIO_THRESHOLD = 1  # Needed VT hit-Counts for increased priority
 VT_DEPRIO_THRESHOLD = 1  # Needed VT engine-Counts (with 0 hits) for de-priorization
-TELEGRAM_ALERT_PRIO = 4  # On which (exact or lower) priority level to send a Telegram Alert if a new ticket was processed. Default: 2
+TELEGRAM_ALERT_PRIO = 3  # On which (exact or lower) priority level to send a Telegram Alert if a new ticket was processed. Default: 2
 
 # You need to export the following env. vars like this:
 # export OTRS_USER_PW="myotrsuserpw"
@@ -269,7 +269,7 @@ def checkVT(type, input):
         print("Scanning Domain '"+input+"'...")
 
         url = 'https://www.virustotal.com/api/v3/domains/'+input
-        response = requests.get(url, headers=header, verify=True)
+        response = requests.get(url, headers=header, verify=False)
 
 
     res = response.json()
@@ -479,13 +479,15 @@ def AddNote_VT_Scan_Domain(client, ticket):
                     if domain == None or domain[1] == "<MISSING":
                         domain = re.search("'sni':\s'([^']*)", ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
                         if domain == None:
-                            domain = re.search("'hostname':\s'([^']*)", ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                            domain = re.search("\"offense_source\": \"(.*?)\"", ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
                             if domain == None:
-                                domain = re.search('Host: ([^\n]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                                domain = re.search("'hostname':\s'([^']*)", ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
                                 if domain == None:
-                                    payload = re.search('[\n\r].*PAYLOAD:\n([^\n]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
-                                    if payload != None:
-                                        domain = re.search('\.\.\.([a-z0-9\-].*)\.\.A', payload[1], re.IGNORECASE) 
+                                    domain = re.search('Host: ([^\n]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                                    if domain == None:
+                                        payload = re.search('[\n\r].*PAYLOAD:\n([^\n]*)', ticketDict['Ticket']['Article'][i]['Body'], re.IGNORECASE)
+                                        if payload != None:
+                                            domain = re.search('\.\.\.([a-z0-9\-].*)\.\.A', payload[1], re.IGNORECASE) 
 
             except Exception as e:
                 print("[WARNING] Non-Fatal Error in AddNote_VT_Scan_Domain > Regex Domain/ Return MSG for ArticleID: "+str(ArticleID))
@@ -661,11 +663,18 @@ def Alert_Ticket(client, ticket, prio_change):
                 msg = " %2A%2AWARNING INCREASED TICKET PRIORITY%0A _"+Title+"_%2A%2A%0A%0A"
 
             if not DRY_RUN:
-                res = requests.post("https://api.telegram.org"+req_path+msg)
+                res = requests.post("https://api.telegram.org"+req_path+msg,verify=False)
                 if(res != "<Response [200]>"):
                     print("[WARNING] Could not send Telegram Alert in Alert_Ticket() -> Reponse not OK (200)")
                     print(res.json())
             return
+        else:
+            if False: # TODO...
+                res = requests.post("https://api.telegram.org"+req_path+msg,verify=False)
+                if(res != "<Response [200]>"):
+                    print("[WARNING] Could not send Telegram Alert in Alert_Ticket() -> Reponse not OK (200)")
+                    print(res.json())
+
     except Exception as e:
         print("[WARNING] Non-Fatal Error in Alert_Ticket()")
         print((traceback.format_exc()))
@@ -685,6 +694,7 @@ def every_minute():
     except Exception as e:
         print("[ERROR] ALERTELAST FAILED:\n")
         print((traceback.format_exc()))
+
     try:
         print("\n\nExecuting alertqradar.py...:\n")
         alertqradar()
@@ -693,6 +703,13 @@ def every_minute():
         print((traceback.format_exc()))
 
     try:
+        print("\n\nEnriching tickets...:\n")
+        enrich_ticket()
+    except Exception as e:
+        print("[ERROR] ENRICH_TICKET FAILED:\n")
+        print((traceback.format_exc()))
+
+def enrich_ticket():
         client = Client(CLIENT_URL,"SIEMUser",OTRS_USER_PW)
         client.session_create()
         last_day = datetime.utcnow() - timedelta(days=1)
@@ -761,12 +778,8 @@ def every_minute():
         print("\n# Done Tickets this round: #\n\n")
         print(DoneTickets)
         print("\n\nSheudled task (1min) done.\nNext start in 60 seconds...")
-        return  
+        return       
 
-    except Exception as e:
-        print("[WARNING] Non-Fatal Error in every_minute()")
-        print((traceback.format_exc()))
-        pass          
 
 def main():
     print("Started OTRS-API-Orchestrator")

@@ -104,7 +104,7 @@ class OTRS():
                 "Ticket": {
                         "Title": "",
                         "Queue": config["Queue"],
-                "Type": "Unclassified",
+                        "Type": "Unclassified",
                         "State": "new",
                         "PriorityID": config["PriorityID"],
                 "CustomerUser": config["CustomerUser"],
@@ -144,6 +144,18 @@ class OTRS():
 
         data["Ticket"]["Title"] = title
         data["Article"]["Subject"] = "[QRadar] Offense " + str(offense["id"])
+
+        #Set priority according to severity
+        if offense["severity"] >= 9:
+            priority = 5
+        if 8 >= offense["severity"] >= 7:
+            priority = 4
+        if 6 >= offense["severity"] >= 4:
+            priority = 3
+        if 3 >= offense["severity"] >= 1:
+            priority = 2
+        data["Ticket"]["PriorityID"] = priority
+
         data["Article"]["Body"] = "A new QRadar Offense has been created.\n\nData:\n" + json.dumps(
             obj=offense,
             ensure_ascii=False,
@@ -196,7 +208,7 @@ def alertqradar():
     offenses = qradar.get_offenses()
     syslog.syslog("{:d} new offenses".format(len(offenses)))
     if not offenses:
-        exit()
+        return
 
     # QRadar Rules
     rules = {}
