@@ -199,7 +199,7 @@ def alertqradar():
     #args = parser.parse_args()
 
     # settings
-    config = json.load(open('config.json'))
+    config = json.load(open('/root/OTRS-API-Orchestrator/config.json'))
 
     qradar = QRadar(config["QRadar"])
 

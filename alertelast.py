@@ -192,7 +192,7 @@ def handle_alert(doc):
   id = deep_get(doc, '_id')
   doc = deep_get(doc, '_source')
   print("Handling Alert with _id: "+id)
-  logline+=("alert_id=",id)
+  #logline+=("alert_id=",id)
 
 
   # Parse params
@@ -289,15 +289,15 @@ def alertelast():
   # iterate the nested dictionaries inside the ["hits"]["hits"] list
   for num, doc in enumerate(all_hits):
       print ("DOC ID:", doc["_id"])
-      logline+="doc_id=", doc["_id"]
+      #logline+="doc_id=", doc["_id"]
 
       handle_alert(doc)
       # print a few spaces between each doc for readability
       print ("\n\n")
   print("Done Quering Elastic SIEM")
 
-  logline += f" result=Alertelast routine was successfull, total_alert_hits={thits}, END"
-  print("Info", logline)
+  #logline += f" result=Alertelast routine was successfull, total_alert_hits={thits}, END"
+  #print("Info", logline)
 
 
       
