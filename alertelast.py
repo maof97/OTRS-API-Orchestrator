@@ -261,7 +261,7 @@ def handle_alert(doc):
 
 
 
-def query_open_rules():
+def alertelast():
   print("\n\n## Quering rules of ELastic SIEM...\n")
   logline = ""
   # Take the user's parameters and put them into a Python
@@ -303,4 +303,4 @@ def query_open_rules():
       
 
 
-query_open_rules()
+alertelast()

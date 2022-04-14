@@ -73,7 +73,8 @@ import validators
 import base64
 from distutils import util
 
-from alertelast import query_open_rules
+from alertelast import alertelast
+from alertqradar import alertqradar
 
 VT_API_KEY = os.environ['VT_API_KEY']
 OTRS_USER_PW = os.environ['OTRS_USER_PW']
@@ -680,9 +681,15 @@ def every_minute():
     print("Executing scheudeled task (1 min):\n\n")
     try:
         print("Executing alertelast.py...:\n")
-        query_open_rules()
+        alertelast()
     except Exception as e:
         print("[ERROR] ALERTELAST FAILED:\n")
+        print((traceback.format_exc()))
+    try:
+        print("\n\nExecuting alertqradar.py...:\n")
+        alertqradar()
+    except Exception as e:
+        print("[ERROR] ALERTQRADAR FAILED:\n")
         print((traceback.format_exc()))
 
     try:
@@ -767,8 +774,9 @@ def main():
         print("\nWARNING Dry Run -- No ticket will be updated!\n\n")
 
     try:
+        #every_minute()
+        #every(60, every_minute) # replaced by cronjob
         every_minute()
-        every(60, every_minute)
     except KeyboardInterrupt:
         print('\n\nStopped Program!\n')
         try:
