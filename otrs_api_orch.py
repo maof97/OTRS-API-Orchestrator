@@ -712,7 +712,7 @@ def every_minute():
 def enrich_ticket():
         client = Client(CLIENT_URL,"SIEMUser",OTRS_USER_PW)
         client.session_create()
-        last_day = datetime.utcnow() - timedelta(days=1)
+        last_day = datetime.utcnow() - timedelta(minutes=1)
         new_tickets = client.ticket_search(TicketCreateTimeNewerDate=last_day, StateType=['new'])
 
         for ticket_id in new_tickets:
