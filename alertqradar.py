@@ -132,8 +132,16 @@ class OTRS():
     def create_ticket(self, offense):
 
         data = self.template.copy()
-        title = "QRadar SIEM: " + offense["description"].replace('\n', '')
+
+        offensetitle = offense["description"].replace('\n', '')
+
+        # Fix unusable offense names
+        if offensetitle == "Suricata - Alert":
+            offensetitle = offense["rules"][0]["name"]
+
+        title = "QRadar SIEM - " + offensetitle
         title += (" | Offender: "+offense["offense_source"])
+
         data["Ticket"]["Title"] = title
         data["Article"]["Subject"] = "[QRadar] Offense " + str(offense["id"])
         data["Article"]["Body"] = "A new QRadar Offense has been created.\n\nData:\n" + json.dumps(
@@ -218,6 +226,7 @@ for offense in offenses:
     try:
         ticket_number = otrs.create_ticket(offense)
     except requests.exceptions.RequestException as e:
+        print(str(e))
         syslog.syslog(str(e))
         syslog.syslog(e.response.text)
     # QRadar Tag and Note
