@@ -196,7 +196,8 @@ def handle_alert(doc):
 
 
   # Parse params
-  title = doc['kibana.alert.rule.name']
+  title = "Kibana SIEM - "
+  title += doc['kibana.alert.rule.name']
   prio = doc['kibana.alert.severity']
 
   try: # Fix Suricata Severity

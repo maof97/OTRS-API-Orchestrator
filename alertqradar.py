@@ -21,7 +21,7 @@ class QRadar():
         )
 
     def get_offenses(self):
-        fields = ["id", "description", "start_time", "rules"]
+        fields = ["id", "description", "start_time", "rules", "categories", "credibility", "device_count", "log_sources", "magnitude", "offense_source", "relevance", "severity"]
         params = {
             "fields": ",".join(fields),
             "filter": "status = OPEN and follow_up = False",
@@ -34,6 +34,7 @@ class QRadar():
                 params=params,
             )
         except requests.exceptions.RequestException as e:
+            print(str(e))
             syslog.syslog(str(e))
             syslog.syslog(e.response.text)
             exit()
@@ -57,14 +58,15 @@ class QRadar():
 
     def set_tag(self, offense):
         try:
-            _ = self.client.request(
-                method="POST",
-                path="/api/siem/offenses/" + str(offense),
-                params={
-                    "fields": "",
-                    "follow_up": "true",
-                },
-            )
+            if os.environ["OTRS_ORCH_PROD"] == "True":
+                _ = self.client.request(
+                    method="POST",
+                    path="/api/siem/offenses/" + str(offense),
+                    params={
+                        "fields": "",
+                        "follow_up": "true",
+                    },
+                )
         except requests.exceptions.RequestException as e:
             syslog.syslog(str(e))
             syslog.syslog(e.response.text)
@@ -130,27 +132,32 @@ class OTRS():
     def create_ticket(self, offense):
 
         data = self.template.copy()
-        data["Ticket"]["Title"] = offense["description"].replace('\n', '')
+        title = "QRadar SIEM: " + offense["description"].replace('\n', '')
+        title += (" | Offender: "+offense["offense_source"])
+        data["Ticket"]["Title"] = title
         data["Article"]["Subject"] = "[QRadar] Offense " + str(offense["id"])
-        data["Article"]["Body"] = json.dumps(
+        data["Article"]["Body"] = "A new QRadar Offense has been created.\n\nData:\n" + json.dumps(
             obj=offense,
             ensure_ascii=False,
             check_circular=False,
             indent=' '*4,
             default=default,
-            sort_keys=True,
+            sort_keys=False,
         )
-        response = self.session.post(
-            self.url,
-            json=data,
-            timeout=10.0,
-            verify=False,
-        )
-        response.raise_for_status()
-        data = response.json()
-        if "Error" in data:
-            raise RuntimeError(str(data["Error"]))
-        return data["TicketNumber"]
+        if os.environ["OTRS_ORCH_PROD"] == "True":
+            response = self.session.post(
+                self.url,
+                json=data,
+                timeout=10.0,
+                verify=False,
+            )
+            response.raise_for_status()
+            data = response.json()
+            if "Error" in data:
+                raise RuntimeError(str(data["Error"]))
+            return data["TicketNumber"]
+        else:
+            print("Would sent ticket now, but debug mode is activated. Here is the ticket body that would have been sent:\n\n",data)
 
 
 
