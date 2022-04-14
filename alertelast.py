@@ -60,12 +60,25 @@ from functools import reduce
 from ssl import create_default_context
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
+import logging
+import logging.handlers
+import socket
 
 DoneTitles = dict()
 
 OTRS_USER_PW = os.environ['OTRS_USER_PW']
 ELASTIC_PW = os.environ['ELASTIC_PW']
+
+
+# Remote Logging setup
+rlog = logging.getLogger('MyLogger')
+rlog.setLevel(logging.DEBUG)
+handler = logging.handlers.SysLogHandler(address = ('127.0.0.1',514))
+rlog.addHandler(handler)
+
+def l(type, msg):
+  print(f"(SYSLOG) ALERTELAST@{socket.gethostname()},logLevel=INFO, productive={not DRY_RUN}, msg={msg}")
+  rlog.info(f"ALERTELAST@{socket.gethostname()},logLevel=INFO, productive={not DRY_RUN}, type={type}, {msg}")
 
 try:
     DRY_RUN = not bool(util.strtobool(os.environ['OTRS_ORCH_PROD']))
@@ -179,6 +192,7 @@ def handle_alert(doc):
   id = deep_get(doc, '_id')
   doc = deep_get(doc, '_source')
   print("Handling Alert with _id: "+id)
+  logline+=("alert_id=",id)
 
 
   # Parse params
@@ -248,6 +262,7 @@ def handle_alert(doc):
 
 def query_open_rules():
   print("\n\n## Quering rules of ELastic SIEM...\n")
+  logline = ""
   # Take the user's parameters and put them into a Python
   # dictionary structured like an Elasticsearch query:
   query_body = {
@@ -266,17 +281,24 @@ def query_open_rules():
   result = elastic_client.search(index=".internal.alerts-security.alerts-default-*", body=query_body, size=999)
 
   # see how many "hits" it returned using the len() function
-  print ("\ntotal hits:", len(result["hits"]["hits"]))
+  thits = len(result["hits"]["hits"])
+  print ("\ntotal hits:", thits)
   all_hits = result['hits']['hits']
 
   # iterate the nested dictionaries inside the ["hits"]["hits"] list
   for num, doc in enumerate(all_hits):
       print ("DOC ID:", doc["_id"])
+      logline+="doc_id=", doc["_id"]
 
       handle_alert(doc)
       # print a few spaces between each doc for readability
       print ("\n\n")
   print("Done Quering Elastic SIEM")
+
+  logline += f" result=Alertelast routine was successfull, total_alert_hits={thits}, END"
+  print("Info", logline)
+
+
       
 
 
