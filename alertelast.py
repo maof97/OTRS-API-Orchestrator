@@ -150,7 +150,7 @@ def send_to_otrs(title, prio, queue, body):
 
   # Map Elastic Prio to OTRS Prio
   try:
-    prio_map = {"low": "4 low", "medium" : "3 normal", "high" : "2 high", "critical" : "1 very-high"}
+    prio_map = {"low": "4 low", "medium" : "3 normal", "high" : "2 high", "critical" : "1 very high"}
     otrs_prio = prio_map[prio]
   except Exception as e:
     print("[WARNING] Non-Fatal Error in send_to_otrs()-Determine Prio. 'prio': "+prio)
